@@ -13,7 +13,7 @@ cartE2 = lambda M, ex, ey: np.vstack(
 cartF2 = lambda M, fx, fy: np.vstack((cart_row2(M.gridFx, fx, fy), cart_row2(M.gridFy, fx, fy)))
 
 def go():
-    nc = 32
+    nc = 256
     level = int(np.log2(nc))
     print(level)
     h = [nc, nc]
@@ -33,8 +33,9 @@ def go():
             return level
         return level-1
 
+
     t1 = time()
-    #tree = QuadTree(h, func, max_level=level)
+    # tree = QuadTree(h, func, max_level=level)
     tree = QuadTree(h, max_level=level)
     tree.build_tree(func2)
     tree.number()
@@ -69,9 +70,9 @@ def go():
     print(dTree.nEy)
 
     plt.figure()
-    tree.plotGrid(grid=False, facesX=True)
+    tree.plotGrid(nodes=True)
     plt.figure()
-    dTree.plotGrid(grid=False, facesX=True)
+    dTree.plotGrid(nodes=True)
     plt.show()
 
     # Face Divergence test
@@ -84,14 +85,14 @@ def go():
     F1 = tree.projectFaceVector(Fc1)
 
     divF = tree.faceDiv.dot(F1)
-    print('Dnorm:', np.linalg.norm(divF-divF_ana, np.inf))
+    print('QuadTree Dnorm:', np.linalg.norm(divF-divF_ana))
 
     Fc2 = cartF2(dTree, fx, fy)
     F2 = dTree.projectFaceVector(Fc2)
     divF2 = dTree.faceDiv.dot(F2)
     divF_ana2 = call2(sol, dTree.gridCC)
 
-    print('Dnorm:', np.linalg.norm(divF2-divF_ana2, np.inf))
+    print('TreeMesh Dnorm:', np.linalg.norm(divF2-divF_ana2))
 
     # Nodal gradient test
     fun = lambda x, y: (np.cos(x)+np.cos(y))
@@ -102,14 +103,14 @@ def go():
     gradE_ana = tree.projectEdgeVector(cartE2(tree, solX, solY))
     fn = call2(fun, tree.gridN)
     gradE = G*fn
-    print('Gnorm:', np.linalg.norm(gradE-gradE_ana, np.inf))
+    print('QuadTree Gnorm:', np.linalg.norm(gradE-gradE_ana))
 
     dG = dTree.nodalGrad
     fn2 = call2(fun, dTree.gridN)
     gradE_ana2 = dTree.projectEdgeVector(cartE2(dTree, solX, solY))
     gradE2 = dG.dot(fn2)
 
-    print('dGnorm:', np.linalg.norm(gradE2-gradE_ana2, np.inf))
+    print('TreeMesh Gnorm:', np.linalg.norm(gradE2-gradE_ana2))
 
 
 if __name__=='__main__':
