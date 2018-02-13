@@ -6,17 +6,15 @@ from time import time
 from discretize import TreeMesh
 
 
-call2 = lambda fun, xyz: fun(xyz[:, 0], xyz[:, 1])
-cart_row2 = lambda g, xfun, yfun: np.c_[call2(xfun, g), call2(yfun, g)]
-cartE2 = lambda M, ex, ey: np.vstack(
-      (cart_row2(M.gridEx, ex, ey), cart_row2(M.gridEy, ex, ey)))
-cartF2 = lambda M, fx, fy: np.vstack((cart_row2(M.gridFx, fx, fy), cart_row2(M.gridFy, fx, fy)))
+call3 = lambda fun, xyz: fun(xyz[:, 0], xyz[:, 1], xyz[:, 2])
+cart_row3 = lambda g, xfun, yfun, zfun: np.c_[call3(xfun, g), call3(yfun, g), call3(zfun, g)]
+cartF3 = lambda M, fx, fy, fz: np.vstack((cart_row3(M.gridFx, fx, fy, fz), cart_row3(M.gridFy, fx, fy, fz), cart_row3(M.gridFz, fx, fy, fz)))
+cartE3 = lambda M, ex, ey, ez: np.vstack((cart_row3(M.gridEx, ex, ey, ez), cart_row3(M.gridEy, ex, ey, ez), cart_row3(M.gridEz, ex, ey, ez)))
 
 def go():
-    nc = 64
+    nc = 16
     level = int(np.log2(nc))
-    print(level)
-    h = [nc, nc]
+    h = [nc, nc, nc]
 
     def func(cell):
         r = cell.center - np.array([0.5]*len(cell.center))
@@ -25,6 +23,7 @@ def go():
             return level
         return level-1
 
+    #"""
     t1 = time()
     # tree = QuadTree(h, func, max_level=level)
     tree = Tree(h, max_level=level)
@@ -35,12 +34,16 @@ def go():
     print("nC", tree.nC)
     print("ntN", tree.ntN)
     print("nhN", tree.nhN)
-    print("ntE", tree.ntEx, tree.ntEy)
-    print("nhE", tree.nhEx, tree.nhEy)
+    print("ntE", tree.ntEx, tree.ntEy, tree.ntEz)
+    print("nhE", tree.nhEx, tree.nhEy, tree.nhEz)
+
+    print("ntF", tree.ntFx, tree.ntFy, tree.ntFz)
+    print("nhF", tree.nhFx, tree.nhFy, tree.nhFz)
 
     print("nN", tree.nN)
-    print("nE", tree.nEx, tree.nEy)
-
+    print("nE", tree.nEx, tree.nEy, tree.nEz)
+    print("nF", tree.nFx, tree.nFy, tree.nFz)
+    #"""
     t1 = time()
     dTree = TreeMesh(h, levels=level)
     dTree.refine(func, balance=True)
@@ -50,16 +53,24 @@ def go():
     print("nC", dTree.nC)
     print("ntN", dTree.ntN)
     print("nhN", dTree.nhN)
-    print("ntE", dTree.ntEx, dTree.ntEy)
-    print("nhE", dTree.nhEx, dTree.nhEy)
+    print("ntE", dTree.ntEx, dTree.ntEy, dTree.ntEz)
+    print("nhE", dTree.nhEx, dTree.nhEy, dTree.nhEz)
+
+    print("ntF", dTree.ntFx, dTree.ntFy, dTree.ntFz)
+    print("nhF", dTree.nhFx, dTree.nhFy, dTree.nhFz)
 
     print("nN", dTree.nN)
-    print("nE", dTree.nEx, dTree.nEy)
+    print("nE", dTree.nEx, dTree.nEy, dTree.nEz)
+    print("nF", dTree.nFx, dTree.nFy, dTree.nFz)
 
     print(np.allclose(tree.gridCC, dTree.gridCC))
     print(np.allclose(np.sort(tree.gridN), np.sort(tree.gridN)))
+    print(np.allclose(np.sort(tree.gridFx), np.sort(tree.gridFx)))
+    print(np.allclose(np.sort(tree.gridFy), np.sort(tree.gridFy)))
+    print(np.allclose(np.sort(tree.gridFz), np.sort(tree.gridFz)))
     print(np.allclose(np.sort(tree.gridEx), np.sort(tree.gridEx)))
     print(np.allclose(np.sort(tree.gridEy), np.sort(tree.gridEy)))
+    print(np.allclose(np.sort(tree.gridEz), np.sort(tree.gridEz)))
 
     """
     plt.figure()
@@ -67,7 +78,7 @@ def go():
     plt.figure()
     dTree.plotGrid(nodes=True)
     plt.show()
-    """
+
 
     # Face Divergence test
     fx = lambda x, y: np.sin(2*np.pi*x)
@@ -105,7 +116,7 @@ def go():
     gradE2 = dG.dot(fn2)
 
     print('TreeMesh Gnorm:', np.linalg.norm(gradE2-gradE_ana2))
-
+    """
 
 if __name__=='__main__':
     go()

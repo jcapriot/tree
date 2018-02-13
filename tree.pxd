@@ -55,6 +55,7 @@ cdef extern from "tree.h":
         Face *faces[6]
         int_t center[3]
         int_t index, key, level, max_level
+        int_t volume
         inline bool is_leaf()
         bool inside_triangle(double x, double y, int_t direction)
 
@@ -72,12 +73,12 @@ cdef extern from "tree.h":
         edge_map_t edges_x, edges_y, edges_z
         face_map_t faces_x, faces_y, faces_z
         vector[Node *] hanging_nodes
-        vector[Edge *] hanging_edges_x, hanging_edges_y, hanging_nodes_z
+        vector[Edge *] hanging_edges_x, hanging_edges_y, hanging_edges_z
         vector[Face *] hanging_faces_x, hanging_faces_y, hanging_faces_z
 
         Tree()
-        Tree(int_t ndim)
 
+        void set_dimension(int_t)
         void set_level(int_t)
         void build_tree(PyWrapper *)
         void number()

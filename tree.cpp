@@ -167,6 +167,9 @@ Cell::Cell(Node *pts[8], int_t ndim, int_t maxlevel, function func){
     center[0] = (p1[0]+p2[0])/2;
     center[1] = (p1[1]+p2[1])/2;
     center[2] = (p1[2]+p2[2])/2;
+    volume = (p2[0]-p1[0])*(p2[1]-p1[1]);
+    if(n_dim==3)
+        volume *= (p2[2]-p1[2]);
     key = key_func(center[0],center[1],center[2]);
     for(int_t i=0; i<n_points; ++i)
         children[i] = NULL;
@@ -187,6 +190,9 @@ Cell::Cell(Node *pts[8], Cell *parent){
     center[0] = (p1[0]+p2[0])/2;
     center[1] = (p1[1]+p2[1])/2;
     center[2] = (p1[2]+p2[2])/2;
+    volume = parent->volume/n_points;
+    //if(n_dim==3)
+    //    volume *= (p2[2]-p1[2]);
     key = key_func(center[0], center[1], center[2]);
 
     for(int_t i=0; i<n_points; ++i)
@@ -543,14 +549,18 @@ Cell::~Cell(){
         }
 };
 
-Tree::Tree(int_t ndim){
+Tree::Tree(){
     nx = 0;
     ny = 0;
     nz = 0;
-    n_dim = ndim;
+    n_dim = 0;
     max_level = 0;
     root = NULL;
 };
+
+void Tree::set_dimension(int_t dim){
+    n_dim = dim;
+}
 
 void Tree::set_level(int_t levels){
     max_level = levels;
@@ -576,11 +586,9 @@ void Tree::build_tree(function test_func){
     for(int_t i=0;i< (1<<n_dim); ++i){
         nodes[points[i]->key] = points[i];
     }
-    std::cout<<"Starting to build with dimensions: "<<n_dim<<std::endl;
     root = new Cell(points, n_dim, max_level, test_func);
     root->divide(nodes);
     root->build_cell_vector(cells);
-    std::cout<<"Built cell vector of length "<< cells.size()<<std::endl;
 
     if(n_dim==3){
         //Generate Faces and edges
@@ -620,7 +628,7 @@ void Tree::build_tree(function test_func){
             fy1 = set_default_face(faces_y, *p1, *p2, *p5, *p6);
             fy2 = set_default_face(faces_y, *p3, *p4, *p7, *p8);
             fz1 = set_default_face(faces_z, *p1, *p2, *p3, *p4);
-            fz2 = set_default_face(faces_y, *p5, *p6, *p7, *p8);
+            fz2 = set_default_face(faces_z, *p5, *p6, *p7, *p8);
 
             fx1->edges[0] = ez1;
             fx1->edges[1] = ey3;
@@ -652,6 +660,26 @@ void Tree::build_tree(function test_func){
             fz2->edges[2] = ey4;
             fz2->edges[3] = ex3;
 
+            cell->faces[0] = fx1;
+            cell->faces[1] = fx2;
+            cell->faces[2] = fy1;
+            cell->faces[3] = fy2;
+            cell->faces[4] = fz1;
+            cell->faces[5] = fz2;
+
+            cell->edges[0] = ex1;
+            cell->edges[1] = ex2;
+            cell->edges[2] = ex3;
+            cell->edges[3] = ex4;
+            cell->edges[4] = ey1;
+            cell->edges[5] = ey2;
+            cell->edges[6] = ey3;
+            cell->edges[7] = ey4;
+            cell->edges[8] = ez1;
+            cell->edges[9] = ez2;
+            cell->edges[10] = ez3;
+            cell->edges[11] = ez4;
+
             fx1->reference++;
             fx2->reference++;
             fy1->reference++;
@@ -660,7 +688,6 @@ void Tree::build_tree(function test_func){
             fz2->reference++;
 
         }
-
         //Process hanging x faces
         for(face_it_type it = faces_x.begin(); it!= faces_x.end(); ++it){
             Face *face = it->second;
@@ -682,8 +709,8 @@ void Tree::build_tree(function test_func){
                     }
                 }
                 //all of my edges are hanging, and most of my points
-                for(int_t i=0;i>4;++i){
-                    face->edges[i]->hanging=true;
+                for(int_t i=0;i<4;++i){
+                    face->edges[i]->hanging = true;
                     face->points[i]->hanging = true;
                 }
                 // the point oposite the parent node key should not be hanging
@@ -799,7 +826,7 @@ void Tree::build_tree(function test_func){
             Face *face = it->second;
             if(face->reference<2){
                 int_t y;
-                y = face->location[0];
+                y = face->location[1];
                 if( y==0 || y==ny){
                     // Face was on the outside, and is not hanging
                     continue;
@@ -822,8 +849,8 @@ void Tree::build_tree(function test_func){
                     }
                 }
                 //all of my edges are hanging
-                for(int_t i=0;i>4;++i){
-                    face->edges[i]->hanging=true;
+                for(int_t i=0;i<4;++i){
+                    face->edges[i]->hanging = true;
                 }
 
                 for(int_t i=0;i<4;++i){
@@ -943,7 +970,7 @@ void Tree::build_tree(function test_func){
             Face *face = it->second;
             if(face->reference<2){
                 int_t z;
-                z = face->location[0];
+                z = face->location[2];
                 if( z==0 || z==nz){
                     // Face was on the outside, and is not hanging
                     continue;
@@ -966,8 +993,8 @@ void Tree::build_tree(function test_func){
                     }
                 }
                 //all of my edges are hanging
-                for(int_t i=0;i>4;++i){
-                    face->edges[i]->hanging=true;
+                for(int_t i=0;i<4;++i){
+                    face->edges[i]->hanging = true;
                 }
 
                 for(int_t i=0;i<4;++i){
@@ -1083,8 +1110,6 @@ void Tree::build_tree(function test_func){
         }
     }
     else{
-
-        std::cout<<"Building Edges and 1 face"<<std::endl;
         //Generate Edges (and 1 face for consistency)
         for(std::vector<Cell *>::size_type i=0; i!= cells.size(); i++){
             Cell *cell = cells[i];
@@ -1106,7 +1131,6 @@ void Tree::build_tree(function test_func){
 
             face->hanging=false;
         }
-        std::cout<<"Finshished with "<<faces_z.size()<<" faces and "<<edges_x.size()+edges_y.size()<< "edges"<<std::endl;
 
         //Process hanging x edges
         for(edge_it_type it = edges_x.begin(); it != edges_x.end(); ++it){
@@ -1238,20 +1262,6 @@ void Tree::number(){
         }
     }
 
-    //Number faces_z
-    ii = 0;
-    ih = faces_z.size()-hanging_faces_z.size();
-    for(face_it_type it = faces_z.begin(); it != faces_z.end(); ++it){
-        Face *face = it->second;
-        if(face->hanging){
-            face->index = ih;
-            ++ih;
-        }else{
-            face->index = ii;
-            ++ii;
-        }
-    }
-
     if(n_dim==3){
         //Number faces_x
         ii = 0;
@@ -1279,6 +1289,21 @@ void Tree::number(){
                 ++ii;
             }
         }
+
+        //Number faces_z
+        ii = 0;
+        ih = faces_z.size()-hanging_faces_z.size();
+        for(face_it_type it = faces_z.begin(); it != faces_z.end(); ++it){
+            Face *face = it->second;
+            if(face->hanging){
+                face->index = ih;
+                ++ih;
+            }else{
+                face->index = ii;
+                ++ii;
+            }
+        }
+
         //Number edges_z
         ii = 0;
         ih = edges_z.size()-hanging_edges_z.size();
@@ -1292,6 +1317,10 @@ void Tree::number(){
               ++ii;
             }
         }
+    }else{
+        //Ensure Fz and cells are numbered the same in 2D
+        for(std::vector<Cell *>::size_type i =0; i!= cells.size(); ++i)
+            faces_z[cells[i]->key]->index = cells[i]->index;
     }
 
 };

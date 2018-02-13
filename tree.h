@@ -105,6 +105,7 @@ class Cell{
     Face *faces[6];
 
     int_t center[3], index, key, level, max_level;
+    int_t volume;
     function test_func;
 
     Cell();
@@ -138,9 +139,9 @@ class Tree{
     std::vector<Face *> hanging_faces_x, hanging_faces_y, hanging_faces_z;
 
     Tree();
-    Tree(int_t ndim);
     ~Tree();
 
+    void set_dimension(int_t dim);
     void set_level(int_t max_level);
     void build_tree(function test_func);
     void number();

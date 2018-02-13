@@ -8,43 +8,55 @@ import scipy.sparse as sp
 import numpy as np
 
 cdef class Cell:
-    cdef double _x, _y, _x0, _y0, _wx, _wy
-    def __cinit__(self, double x, double y, double x0, double y0):
+    cdef double _x, _y, _z, _x0, _y0, _z0, _wx, _wy, _wz
+    cdef int_t _dim
+    def __cinit__(self, double x, double y, double z,
+                  double x0, double y0, double z0, int_t dim):
+        self._dim = dim
         self._x = x
         self._y = y
         self._x0 = x0
         self._y0 = y0
         self._wx = 2*(x-x0)
         self._wy = 2*(y-y0)
+        if(dim>2):
+            self._z0 = z0
+            self._z = z
+            self._wz = 2*(z-z0)
 
     @property
     def center(self):
+        if self._dim>2: return tuple((self._x, self._y, self._z))
         return tuple((self._x, self._y))
 
     @property
     def x0(self):
+        if self._dim>2: return tuple((self._x0, self._y0, self._z0))
         return tuple((self._x0, self._y0))
 
     @property
     def width(self):
+        if self._dim>2: return tuple((self._wx, self._wy, self._wz))
         return tuple((self._wx, self._wy))
 
 
 cdef int_t _evaluate_func(void* obj, void* function, c_Cell* cell) with gil:
     self = <object> obj
     func = <object> function
-    cdef double scale_x, scale_y
-    scale_x = self.scale_x
-    scale_y = self.scale_y
-    cdef double shift_x, shift_y
-    shift_x = self.x0[0]
-    shift_y = self.x0[1]
-
-    cdef double x = cell.center[0]*scale_x+shift_x
-    cdef double y = cell.center[1]*scale_y+shift_y
-    cdef double x0 = cell.points[0].location[0]*scale_x + shift_x
-    cdef double y0 = cell.points[0].location[1]*scale_y + shift_y
-    pycell = Cell(x,y,x0,y0)
+    cdef double x, y, z, x0, y0, z0
+    scale = self.scale
+    shift = self.x0
+    cdef int_t dim = self.dim
+    x = cell.center[0]*scale[0]+shift[0]
+    y = cell.center[1]*scale[1]+shift[1]
+    x0 = cell.points[0].location[0]*scale[0] + shift[0]
+    y0 = cell.points[0].location[1]*scale[1] + shift[1]
+    if(dim>2):
+        z = cell.center[2]*scale[2]+shift[2]
+        z0 = cell.points[0].location[2]*scale[2]+shift[2]
+        pycell = Cell(x, y, z, x0, y0, z0, dim)
+    else:
+        pycell = Cell(x, y, 0, x0, y0, 0, dim)
     return <int_t> func(pycell)
 
 cdef struct double4:
@@ -116,34 +128,54 @@ cdef inline int sign(double val):
 cdef class _QuadTree:
     cdef c_Tree *tree
     cdef PyWrapper *wrapper
-    cdef int_t _nx, _ny, max_level
-    cdef double _scale_x, _scale_y
+    cdef int_t _nx, _ny, _nz, max_level
+    cdef double[3] _scale, _shift
 
     cdef object _gridCC, _gridN, _gridEx, _gridEy
     cdef object _gridhN, _gridhEx, _gridhEy
     cdef object _aveFx2CC, _aveFy2CC, _aveF2CC, _aveF2CCV,_aveN2CC,_aveE2CC,_aveE2CCV
 
-    def __cinit__(self):
+    def __cinit__(self, *args, **kwargs):
         self.wrapper = new PyWrapper()
-        self.tree = new c_Tree(2)
+        self.tree = new c_Tree()
 
     def __init__(self, max_level, x0, w):
         self.max_level = max_level
         self._nx = 2<<max_level
         self._ny = 2<<max_level
 
-        self._scale_x = w[0]/self._nx
-        self._scale_y = w[1]/self._ny
+        self._shift[0] = x0[0]
+        self._scale[0] = w[0]/self._nx
 
+        self._shift[1] = x0[1]
+        self._scale[1] = w[1]/self._ny
+
+        if self.dim>2:
+            self._nz = 2<<max_level
+            self._scale[2] = w[2]/self._ny
+            self._shift[2] = x0[2]
+
+        self.tree.set_dimension(self.dim)
         self.tree.set_level(self.max_level)
 
         self._gridCC = None
         self._gridN = None
         self._gridhN = None
+
         self._gridEx = None
         self._gridEy = None
+        self._gridEz = None
         self._gridhEx = None
         self._gridhEy = None
+        self._gridhEz = None
+
+        self._gridFx = None
+        self._gridFy = None
+        self._gridFz = None
+        self._gridhFx = None
+        self._gridhFy = None
+        self._gridhFz = None
+
         self._aveFx2CC = None
         self._aveFy2CC = None
         self._aveF2CC = None
@@ -167,8 +199,8 @@ cdef class _QuadTree:
         self.tree.number()
 
     @property
-    def dim(self):
-        return 2
+    def scale(self):
+        return self._scale
 
     @property
     def nx(self):
@@ -179,12 +211,8 @@ cdef class _QuadTree:
         return self._ny
 
     @property
-    def scale_x(self):
-        return self._scale_x
-
-    @property
-    def scale_y(self):
-        return self._scale_y
+    def nz(self):
+        return self._nz
 
     @property
     def nC(self):
@@ -204,15 +232,15 @@ cdef class _QuadTree:
 
     @property
     def nE(self):
-        return self.nEx+self.nEy
+        return self.nEx+self.nEy+self.nEz
 
     @property
     def nhE(self):
-        return self.nhEx+self.nhEy
+        return self.nhEx+self.nhEy+self.nhEz
 
     @property
     def ntE(self):
-        return self.ntEx+self.ntEy
+        return self.nE+self.nhE
 
     @property
     def nEx(self):
@@ -223,12 +251,20 @@ cdef class _QuadTree:
         return self.ntEy-self.nhEy
 
     @property
+    def nEz(self):
+        return self.ntEz-self.nhEz
+
+    @property
     def ntEx(self):
         return self.tree.edges_x.size()
 
     @property
     def ntEy(self):
         return self.tree.edges_y.size()
+
+    @property
+    def ntEz(self):
+        return self.tree.edges_z.size()
 
     @property
     def nhEx(self):
@@ -239,189 +275,353 @@ cdef class _QuadTree:
         return self.tree.hanging_edges_y.size()
 
     @property
+    def nhEz(self):
+        return self.tree.hanging_edges_z.size()
+
+    @property
     def nF(self):
-        return self.nE
+        return self.nFx+self.nFy+self.nFz
 
     @property
     def nhF(self):
-        return self.nhE
+        return self.nhFx+self.nhFy+self.nhFz
 
     @property
     def ntF(self):
-        return self.ntE
+        return self.nF+self.nhF
 
     @property
     def nFx(self):
-        return self.nEy
+        return self.ntFx-self.nhFx
 
     @property
     def nFy(self):
-        return self.nEx
+        return self.ntFy-self.nhFy
+
+    @property
+    def nFz(self):
+        return self.ntFz-self.nhFz
 
     @property
     def ntFx(self):
-        return self.ntEy
+        if(self.dim==2): return self.ntEy
+        return self.tree.faces_x.size()
 
     @property
     def ntFy(self):
-        return self.ntEx
+        if(self.dim==2): return self.ntEx
+        return self.tree.faces_y.size()
+
+    @property
+    def ntFz(self):
+        if(self.dim==2): return 0
+        return self.tree.faces_z.size()
 
     @property
     def nhFx(self):
-        return self.nhEy
+        if(self.dim==2): return self.nhEy
+        return self.tree.hanging_faces_x.size()
 
     @property
     def nhFy(self):
-        return self.nhEx
+        if(self.dim==2): return self.nhEx
+        return self.tree.hanging_faces_y.size()
+
+    @property
+    def nhFz(self):
+        if(self.dim==2): return 0
+        return self.tree.hanging_faces_z.size()
 
     @property
     def gridN(self):
         cdef np.float64_t[:, :] gridN
         cdef Node *node
-        cdef np.int64_t ii;
-        cdef double shift_x, shift_y
-        shift_x = self.x0[0]
-        shift_y = self.x0[1]
+        cdef np.int64_t ii, ind, dim
         if self._gridN is None:
-            self._gridN = np.empty((self.nN, 2) ,dtype=np.float64)
+            dim = self.dim
+            self._gridN = np.empty((self.nN, dim) ,dtype=np.float64)
             gridN = self._gridN
+            scale = self._scale
+            shift = self._shift
             for it in self.tree.nodes:
                 node = it.second
                 if not node.hanging:
-                    ii = node.index
-                    gridN[ii, 0] = node.location[0]*self._scale_x + shift_x
-                    gridN[ii, 1] = node.location[1]*self._scale_y + shift_y
+                    ind = node.index
+                    for ii in range(dim):
+                        gridN[ind, ii] = node.location[ii]*scale[ii]+shift[ii]
         return self._gridN
 
     @property
     def gridhN(self):
         cdef np.float64_t[:, :] gridN
         cdef Node *node
-        cdef np.int64_t ii;
-        cdef double shift_x, shift_y
-        shift_x = self.x0[0]
-        shift_y = self.x0[1]
+        cdef np.int64_t ii, ind, dim
         if self._gridhN is None:
-            self._gridhN = np.empty((self.nhN, 2), dtype=np.float64)
+            dim = self.dim
+            self._gridhN = np.empty((self.nhN, dim), dtype=np.float64)
             gridhN = self._gridhN
-            for it in self.tree.nodes:
-                node = it.second
-                if node.hanging:
-                    ii = node.index-self.nN
-                    gridhN[ii, 0] = node.location[0]*self._scale_x + shift_x
-                    gridhN[ii, 1] = node.location[1]*self._scale_y + shift_y
+            scale = self._scale
+            shift = self._shift
+            for node in self.tree.hanging_nodes:
+                ind = node.index-self.nN
+                for ii in range(dim):
+                    gridhN[ind, ii] = node.location[ii]*scale[ii]+shift[ii]
         return self._gridhN
 
     @property
     def gridCC(self):
         cdef np.float64_t[:, :] gridCC
-        cdef np.int64_t ii;
-        cdef double shift_x, shift_y
-        shift_x = self.x0[0]
-        shift_y = self.x0[1]
+        cdef np.int64_t ii, ind, dim
         if self._gridCC is None:
-            self._gridCC = np.empty((self.nC, 2), dtype=np.float64)
+            dim = self.dim
+            self._gridCC = np.empty((self.nC, dim), dtype=np.float64)
             gridCC = self._gridCC
+            scale = self._scale
+            shift = self._shift
             for cell in self.tree.cells:
-                ii = cell.index
-                gridCC[ii, 0] = cell.center[0]*self._scale_x + shift_x
-                gridCC[ii, 1] = cell.center[1]*self._scale_y + shift_y
+                ind = cell.index
+                for ii in range(dim):
+                    gridCC[ind, ii] = cell.center[ii]*scale[ii]+shift[ii]
         return self._gridCC
 
     @property
     def gridEx(self):
         cdef np.float64_t[:, :] gridEx
         cdef Edge *edge
-        cdef np.int64_t ii;
-        cdef double shift_x, shift_y
-        shift_x = self.x0[0]
-        shift_y = self.x0[1]
+        cdef np.int64_t ii, ind, dim
         if self._gridEx is None:
-            self._gridEx = np.empty((self.nEx, 2), dtype=np.float64)
+            dim = self.dim
+            self._gridEx = np.empty((self.nEx, dim), dtype=np.float64)
             gridEx = self._gridEx
+            scale = self._scale
+            shift = self._shift
             for it in self.tree.edges_x:
                 edge = it.second
                 if not edge.hanging:
-                    ii = edge.index
-                    gridEx[ii, 0] = edge.location[0]*self._scale_x + shift_x
-                    gridEx[ii, 1] = edge.location[1]*self._scale_y + shift_y
+                    ind = edge.index
+                    for ii in range(dim):
+                        gridEx[ind, ii] = edge.location[ii]*scale[ii]+shift[ii]
         return self._gridEx
 
     @property
     def gridhEx(self):
         cdef np.float64_t[:, :] gridhEx
         cdef Edge *edge
-        cdef np.int64_t ii;
-        cdef double shift_x, shift_y
-        shift_x = self.x0[0]
-        shift_y = self.x0[1]
+        cdef np.int64_t ii, ind, dim
         if self._gridhEx is None:
-            self._gridhEx = np.empty((self.nhEx, 2), dtype=np.float64)
+            dim = self.dim
+            self._gridhEx = np.empty((self.nhEx, dim), dtype=np.float64)
             gridhEx = self._gridhEx
-            for it in self.tree.edges_x:
-                edge = it.second
-                if edge.hanging:
-                    ii = edge.index-self.nEx
-                    gridhEx[ii, 0] = edge.location[0]*self._scale_x + shift_x
-                    gridhEx[ii, 1] = edge.location[1]*self._scale_y + shift_y
+            scale = self._scale
+            shift = self._shift
+            for edge in self.tree.hanging_edges_x:
+                ind = edge.index-self.nEx
+                for ii in range(dim):
+                    gridhEx[ind,ii] = edge.location[ii]*scale[ii]+shift[ii]
         return self._gridhEx
 
     @property
     def gridEy(self):
         cdef np.float64_t[:, :] gridEy
         cdef Edge *edge
-        cdef np.int64_t ii;
-        cdef double shift_x, shift_y
-        shift_x = self.x0[0]
-        shift_y = self.x0[1]
+        cdef np.int64_t ii, ind, dim
         if self._gridEy is None:
-            self._gridEy = np.empty((self.nEy, 2), dtype=np.float64)
+            dim = self.dim
+            self._gridEy = np.empty((self.nEy, dim), dtype=np.float64)
             gridEy = self._gridEy
+            scale = self._scale
+            shift = self._shift
             for it in self.tree.edges_y:
                 edge = it.second
                 if not edge.hanging:
-                    ii = edge.index
-                    gridEy[ii, 0] = edge.location[0]*self._scale_x + shift_x
-                    gridEy[ii, 1] = edge.location[1]*self._scale_y + shift_y
+                    ind = edge.index
+                    for ii in range(dim):
+                        gridEy[ind,ii] = edge.location[ii]*scale[ii]+shift[ii]
         return self._gridEy
 
     @property
     def gridhEy(self):
         cdef np.float64_t[:,:] gridhEy
         cdef Edge *edge
-        cdef np.int64_t ii;
-        cdef double shift_x, shift_y
-        shift_x = self.x0[0]
-        shift_y = self.x0[1]
+        cdef np.int64_t ii, ind, dim
         if self._gridhEy is None:
-            self._gridhEy = np.empty((self.nhEy, 2), dtype=np.float64)
+            dim = self.dim
+            self._gridhEy = np.empty((self.nhEy, dim), dtype=np.float64)
             gridhEy = self._gridhEy
-            for it in self.tree.edges_y:
-                edge = it.second
-                if edge.hanging:
-                    ii = edge.index-self.nEy
-                    gridhEy[ii, 0] = edge.location[0]*self._scale_x + shift_x
-                    gridhEy[ii, 1] = edge.location[1]*self._scale_y + shift_y
+            scale = self._scale
+            shift = self._shift
+            for edge in self.tree.hanging_edges_y:
+                ind = edge.index-self.nEy
+                for ii in range(dim):
+                    gridhEy[ind, ii] = edge.location[ii]*scale[ii]+shift[ii]
         return self._gridhEy
 
     @property
+    def gridEz(self):
+        cdef np.float64_t[:, :] gridEz
+        cdef Edge *edge
+        cdef np.int64_t ii, ind, dim
+        if self._gridEz is None:
+            dim = self.dim
+            self._gridEz = np.empty((self.nEz, dim), dtype=np.float64)
+            gridEz = self._gridEz
+            scale = self._scale
+            shift = self._shift
+            for it in self.tree.edges_z:
+                edge = it.second
+                if not edge.hanging:
+                    ind = edge.index
+                    for ii in range(dim):
+                        gridEz[ind,ii] = edge.location[ii]*scale[ii]+shift[ii]
+        return self._gridEz
+
+    @property
+    def gridhEz(self):
+        cdef np.float64_t[:,:] gridhEz
+        cdef Edge *edge
+        cdef np.int64_t ii, ind, dim
+        if self._gridhEz is None:
+            dim = self.dim
+            self._gridhEz = np.empty((self.nhEz, dim), dtype=np.float64)
+            gridhEz = self._gridhEz
+            scale = self._scale
+            shift = self._shift
+            for edge in self.tree.hanging_edges_z:
+                ind = edge.index-self.nEz
+                for ii in range(dim):
+                    gridhEz[ind, ii] = edge.location[ii]*scale[ii]+shift[ii]
+        return self._gridhEz
+
+    @property
     def gridFx(self):
-        return self.gridEy
+        if(self.dim==2): return self.gridEy
+
+        cdef np.float64_t[:,:] gridFx
+        cdef Face *face
+        cdef np.int64_t ii, ind, dim
+        if self._gridFx is None:
+            dim = self.dim
+            self._gridFx = np.empty((self.nFx, dim), dtype=np.float64)
+            gridFx = self._gridFx
+            scale = self._scale
+            shift = self._shift
+            for it in self.tree.faces_x:
+                face = it.second
+                if not face.hanging:
+                    ind = face.index
+                    for ii in range(dim):
+                        gridFx[ind, ii] = face.location[ii]*scale[ii]+shift[ii]
+        return self._gridFx
 
     @property
     def gridFy(self):
-        return self.gridEx
+        if(self.dim==2): return self.gridEx
+
+        cdef np.float64_t[:,:] gridFy
+        cdef Face *face
+        cdef np.int64_t ii, ind, dim
+        if self._gridFy is None:
+            dim = self.dim
+            self._gridFy = np.empty((self.nFy, dim), dtype=np.float64)
+            gridFy = self._gridFy
+            scale = self._scale
+            shift = self._shift
+            for it in self.tree.faces_y:
+                face = it.second
+                if not face.hanging:
+                    ind = face.index
+                    for ii in range(dim):
+                        gridFy[ind, ii] = face.location[ii]*scale[ii]+shift[ii]
+        return self._gridFy
+
+    @property
+    def gridFz(self):
+        if(self.dim==2): return self.gridCC
+
+        cdef np.float64_t[:,:] gridFz
+        cdef Face *face
+        cdef np.int64_t ii, ind, dim
+        if self._gridFz is None:
+            dim = self.dim
+            self._gridFz = np.empty((self.nFz, dim), dtype=np.float64)
+            gridFz = self._gridFz
+            scale = self._scale
+            shift = self._shift
+            for it in self.tree.faces_z:
+                face = it.second
+                if not face.hanging:
+                    ind = face.index
+                    for ii in range(dim):
+                        gridFz[ind, ii] = face.location[ii]*scale[ii]+shift[ii]
+        return self._gridFz
 
     @property
     def gridhFx(self):
-        return self.gridhEy
+        if(self.dim==2): return self.gridhEy
+
+        cdef np.float64_t[:,:] gridFx
+        cdef Face *face
+        cdef np.int64_t ii, ind, dim
+        if self._gridhFx is None:
+            dim = self.dim
+            self._gridhFx = np.empty((self.nhFx, dim), dtype=np.float64)
+            gridhFx = self._gridhFx
+            scale = self._scale
+            shift = self._shift
+            for face in self.tree.hanging_faces_x:
+                ind = face.index-self.nFx
+                for ii in range(dim):
+                    gridhFx[ind, ii] = face.location[ii]*scale[ii]+shift[ii]
+        return self._gridFx
 
     @property
     def gridhFy(self):
-        return self.gridhEx
+        if(self.dim==2): return self.gridhEx
+
+        cdef np.float64_t[:,:] gridhFy
+        cdef Face *face
+        cdef np.int64_t ii, ind, dim
+        if self._gridhFy is None:
+            dim = self.dim
+            self._gridhFy = np.empty((self.nhFy, dim), dtype=np.float64)
+            gridhFy = self._gridhFy
+            scale = self._scale
+            shift = self._shift
+            for face in self.tree.hanging_faces_y:
+                ind = face.index-self.nFy
+                for ii in range(dim):
+                    gridhFy[ind, ii] = face.location[ii]*scale[ii]+shift[ii]
+        return self._gridFy
+
+    @property
+    def gridhFz(self):
+        if(self.dim==2): return np.array([])
+
+        cdef np.float64_t[:,:] gridhFz
+        cdef Face *face
+        cdef np.int64_t ii, ind, dim
+        if self._gridhFz is None:
+            dim = self.dim
+            self._gridhFz = np.empty((self.nhFz, dim), dtype=np.float64)
+            gridhFz = self._gridhFz
+            scale = self._scale
+            shift = self._shift
+            for face in self.tree.hanging_faces_z:
+                ind = face.index-self.nFz
+                for ii in range(dim):
+                    gridhFz[ind, ii] = face.location[ii]*scale[ii]+shift[ii]
+        return self._gridFz
 
     @property
     def faceDiv(self):
+        if(self.dim==2):
+            D = self._faceDiv2D() # Because it uses edges instead of faces
+        else:
+            D = self._faceDiv3D()
+        R = self._deflate_faces()
+        return D*R
+
+    def _faceDiv2D(self):
         cdef np.int64_t[:] I = np.empty(self.nC*4, dtype=np.int64)
         cdef np.int64_t[:] J = np.empty(self.nC*4, dtype=np.int64)
         cdef np.float64_t[:] V = np.empty(self.nC*4, dtype=np.float64)
@@ -439,15 +639,45 @@ cdef class _QuadTree:
             J[i*4+2] = edges[2].index #y edge, x face
             J[i*4+3] = edges[3].index+offset #x edge, y face (add offset)
 
-            volume = (edges[0].length*self._scale_y)*(edges[1].length*self._scale_x)
-            V[i*4  ] = -(edges[0].length*self._scale_y/volume)
-            V[i*4+1] = edges[1].length*self._scale_x/volume
-            V[i*4+2] = edges[2].length*self._scale_y/volume
-            V[i*4+3] = -(edges[3].length*self._scale_x/volume)
+            volume = cell.volume*self._scale[0]*self._scale[1]
+            V[i*4  ] = -(edges[0].length*self._scale[1]/volume)
+            V[i*4+1] = edges[1].length*self._scale[0]/volume
+            V[i*4+2] = edges[2].length*self._scale[1]/volume
+            V[i*4+3] = -(edges[3].length*self._scale[0]/volume)
             i += 1
+        return sp.csr_matrix((V, (I, J)))
 
-        R = self.deflate_faces()
-        return sp.csr_matrix((V, (I, J)))*R
+    def _faceDiv3D(self):
+        cdef:
+            np.int64_t[:] I = np.empty(self.nC*6, dtype=np.int64)
+            np.int64_t[:] J = np.empty(self.nC*6, dtype=np.int64)
+            np.float64_t[:] V = np.empty(self.nC*6, dtype=np.float64)
+
+            np.int64_t i = 0
+            Face *faces[6]
+            np.int64_t offset1 = self.tree.faces_x.size()
+            np.int64_t offset2 = offset1+self.tree.faces_y.size()
+            double volume
+
+        for cell in self.tree.cells:
+            faces = cell.faces
+            I[i*6:i*6+6] = cell.index
+            J[i*6  ] = faces[0].index #x1 face
+            J[i*6+1] = faces[1].index #x2 face
+            J[i*6+2] = faces[2].index+offset1 #y face (add offset1)
+            J[i*6+3] = faces[3].index+offset1 #y face (add offset1)
+            J[i*6+4] = faces[4].index+offset2 #z face (add offset2)
+            J[i*6+5] = faces[5].index+offset2 #z face (add offset2)
+
+            volume = cell.volume*self._scale[0]*self._scale[1]*self._scale[2]
+            V[i*6  ] = -(faces[0].area*self._scale[1]*self.scale[2])/volume
+            V[i*6+1] = (faces[1].area*self._scale[1]*self.scale[2])/volume
+            V[i*6+2] = -(faces[2].area*self._scale[0]*self.scale[2])/volume
+            V[i*6+3] = (faces[3].area*self._scale[0]*self.scale[2])/volume
+            V[i*6+4] = -(faces[4].area*self._scale[0]*self.scale[1])/volume
+            V[i*6+5] = (faces[5].area*self._scale[0]*self.scale[1])/volume
+            i += 1
+        return sp.csr_matrix((V, (I, J)))
 
     @property
     def cellGrad(self):
@@ -468,10 +698,10 @@ cdef class _QuadTree:
             J[i*4+2] = edges[2].index #y edge, x face
             J[i*4+3] = edges[3].index+offset #x edge, y face (add offset)
 
-            V[i*4  ] = edges[0].length*self._scale_y
-            V[i*4+1] = -(edges[1].length*self._scale_x)
-            V[i*4+2] = -(edges[2].length*self._scale_y)
-            V[i*4+3] = edges[3].length*self._scale_x
+            V[i*4  ] = edges[0].length*self._scale[1]
+            V[i*4+1] = -(edges[1].length*self._scale[0])
+            V[i*4+2] = -(edges[2].length*self._scale[1])
+            V[i*4+3] = edges[3].length*self._scale[0]
             i += 1
 
         R = self.deflate_faces()
@@ -490,75 +720,152 @@ cdef class _QuadTree:
                 data[indptr[i+1]] = sign(data[indptr[i+1]])/dx
         return G
 
-    def deflate_faces(self):
+    def _deflate_edges_x(self):
         #I is output index (with hanging)
         #J is input index (without hanging)
-        cdef np.int64_t[:] I = np.empty(self.ntE, dtype=np.int64)
-        cdef np.int64_t[:] J = np.empty(self.ntE, dtype=np.int64)
-        cdef np.float64_t[:] V = np.empty(self.ntE, dtype=np.float64)
+        cdef np.int64_t[:] I = np.empty(2*self.ntEx, dtype=np.int64)
+        cdef np.int64_t[:] J = np.empty(2*self.ntEx, dtype=np.int64)
+        cdef np.float64_t[:] V = np.empty(2*self.ntEx, dtype=np.float64)
         cdef Edge *edge
-        cdef np.int64_t ii;
-        # x faces = y edges
-        for it in self.tree.edges_y:
-            edge = it.second
-            ii = edge.index
-            I[ii] = ii
-            if edge.hanging:
-                J[ii] = edge.parents[0].index
-            else:
-                J[ii] = ii
-            V[ii] = 1.0
-
-        cdef np.int64_t offset1 = self.ntEy
-        cdef np.int64_t offset2 = self.nEy
-        # y faces = x edges
-        for it in self.tree.edges_x:
-            edge = it.second
-            ii = edge.index+offset1
-            I[ii] = ii
-            if edge.hanging:
-                J[ii] = edge.parents[0].index+offset2
-            else:
-                J[ii] = edge.index+offset2
-            V[ii] = 1.0
-
-        return sp.csr_matrix((V, (I, J)))
-
-    def deflate_faces_x(self):
-        #I is output index (with hanging)
-        #J is input index (without hanging)
-        cdef np.int64_t[:] I = np.empty(self.ntEx, dtype=np.int64)
-        cdef np.int64_t[:] J = np.empty(self.ntEx, dtype=np.int64)
-        cdef np.float64_t[:] V = np.empty(self.ntEx, dtype=np.float64)
-        cdef Edge *edge
-        cdef np.int64_t ii;
-        # x faces = y edges
-        for it in self.tree.edges_y:
-            edge = it.second
-            ii = edge.index
-            I[ii] = ii
-            if edge.hanging:
-                J[ii] = edge.parents[0].index
-            else:
-                J[ii] = ii
-            V[ii] = 1.0
-        return sp.csr_matrix((V, (I, J)))
-
-    def deflate_faces_y(self):
-        #I is output index (with hanging)
-        #J is input index (without hanging)
-        cdef np.int64_t[:] I = np.empty(self.ntEx, dtype=np.int64)
-        cdef np.int64_t[:] J = np.empty(self.ntEx, dtype=np.int64)
-        cdef np.float64_t[:] V = np.empty(self.ntEx, dtype=np.float64)
-        cdef Edge *edge
-        cdef np.int64_t ii;
-        # y faces = x edges
+        cdef np.int64_t ii
+        #x edges:
         for it in self.tree.edges_x:
             edge = it.second
             ii = edge.index
-            I[ii] = ii
+            I[2*ii  ] = ii
+            I[2*ii+1] = ii
             if edge.hanging:
-                J[ii] = edge.parents[0].index
+                J[2*ii  ] = edge.parents[0].index
+                J[2*ii+1] = edge.parents[1].index
+            else:
+                J[2*ii] = ii
+                J[2*ii+1] = ii
+            V[2*ii  ] = 0.5
+            V[2*ii+1] = 0.5
+        return sp.csr_matrix((V, (I, J)))
+
+    def _deflate_edges_y(self):
+        #I is output index (with hanging)
+        #J is input index (without hanging)
+        cdef int_t dim = self.dim
+        cdef np.int64_t[:] I = np.empty(2*self.ntEy, dtype=np.int64)
+        cdef np.int64_t[:] J = np.empty(2*self.ntEy, dtype=np.int64)
+        cdef np.float64_t[:] V = np.empty(2*self.ntEy, dtype=np.float64)
+        cdef Edge *edge
+        cdef np.int64_t ii
+        #x edges:
+        for it in self.tree.edges_y:
+            edge = it.second
+            ii = edge.index
+            I[2*ii  ] = ii
+            I[2*ii+1] = ii
+            if edge.hanging:
+                J[2*ii  ] = edge.parents[0].index
+                J[2*ii+1] = edge.parents[1].index
+            else:
+                J[2*ii] = ii
+                J[2*ii+1] = ii
+            V[2*ii  ] = 0.5
+            V[2*ii+1] = 0.5
+        return sp.csr_matrix((V, (I, J)))
+
+    def _deflate_edges_z(self):
+        #I is output index (with hanging)
+        #J is input index (without hanging)
+        cdef int_t dim = self.dim
+        cdef np.int64_t[:] I = np.empty(2*self.ntEz, dtype=np.int64)
+        cdef np.int64_t[:] J = np.empty(2*self.ntEz, dtype=np.int64)
+        cdef np.float64_t[:] V = np.empty(2*self.ntEz, dtype=np.float64)
+        cdef Edge *edge
+        cdef np.int64_t ii
+        #x edges:
+        for it in self.tree.edges_z:
+            edge = it.second
+            ii = edge.index
+            I[2*ii  ] = ii
+            I[2*ii+1] = ii
+            if edge.hanging:
+                J[2*ii  ] = edge.parents[0].index
+                J[2*ii+1] = edge.parents[1].index
+            else:
+                J[2*ii] = ii
+                J[2*ii+1] = ii
+            V[2*ii  ] = 0.5
+            V[2*ii+1] = 0.5
+        return sp.csr_matrix((V, (I, J)))
+
+    def _deflate_edges(self):
+        Rx = self._deflate_edges_x()
+        Ry = self._deflate_edges_y()
+        Rz = self._deflate_edges_z()
+        return sp.block_diag((Rx, Ry, Rz))
+
+    def _deflate_faces(self):
+        if(self.dim==2):
+            Rx = self._deflate_edges_x()
+            Ry = self._deflate_edges_y()
+            return sp.block_diag((Ry, Rx))
+        else:
+            Rx = self._deflate_faces_x()
+            Ry = self._deflate_faces_y()
+            Rz = self._deflate_faces_z()
+            return sp.block_diag((Rx, Ry, Rz))
+
+    def _deflate_faces_x(self):
+        #I is output index (with hanging)
+        #J is input index (without hanging)
+        cdef np.int64_t[:] I = np.empty(self.ntFx, dtype=np.int64)
+        cdef np.int64_t[:] J = np.empty(self.ntFx, dtype=np.int64)
+        cdef np.float64_t[:] V = np.empty(self.ntFx, dtype=np.float64)
+        cdef Face *face
+        cdef np.int64_t ii;
+
+        for it in self.tree.faces_x:
+            face = it.second
+            ii = face.index
+            I[ii] = ii
+            if face.hanging:
+                J[4*ii] = face.parent.index
+            else:
+                J[ii] = ii
+            V[ii] = 1.0
+        return sp.csr_matrix((V, (I, J)))
+
+    def _deflate_faces_y(self):
+        #I is output index (with hanging)
+        #J is input index (without hanging)
+        cdef np.int64_t[:] I = np.empty(self.ntFy, dtype=np.int64)
+        cdef np.int64_t[:] J = np.empty(self.ntFy, dtype=np.int64)
+        cdef np.float64_t[:] V = np.empty(self.ntFy, dtype=np.float64)
+        cdef Face *face
+        cdef np.int64_t ii;
+
+        for it in self.tree.faces_y:
+            face = it.second
+            ii = face.index
+            I[ii] = ii
+            if face.hanging:
+                J[4*ii] = face.parent.index
+            else:
+                J[ii] = ii
+            V[ii] = 1.0
+        return sp.csr_matrix((V, (I, J)))
+
+    def _deflate_faces_z(self):
+        #I is output index (with hanging)
+        #J is input index (without hanging)
+        cdef np.int64_t[:] I = np.empty(self.ntFz, dtype=np.int64)
+        cdef np.int64_t[:] J = np.empty(self.ntFz, dtype=np.int64)
+        cdef np.float64_t[:] V = np.empty(self.ntFz, dtype=np.float64)
+        cdef Face *face
+        cdef np.int64_t ii;
+
+        for it in self.tree.faces_z:
+            face = it.second
+            ii = face.index
+            I[ii] = ii
+            if face.hanging:
+                J[4*ii] = face.parent.index
             else:
                 J[ii] = ii
             V[ii] = 1.0
@@ -566,14 +873,16 @@ cdef class _QuadTree:
 
     @property
     def nodalGrad(self):
-        cdef np.int64_t[:] I = np.empty(self.nE*2, dtype=np.int64)
-        cdef np.int64_t[:] J = np.empty(self.nE*2, dtype=np.int64)
-        cdef np.float64_t[:] V = np.empty(self.nE*2, dtype=np.float64)
+        cdef int_t dim = self.dim
+        cdef np.int64_t[:] I = np.empty(self.nE*dim, dtype=np.int64)
+        cdef np.int64_t[:] J = np.empty(self.nE*dim, dtype=np.int64)
+        cdef np.float64_t[:] V = np.empty(self.nE*dim, dtype=np.float64)
 
         cdef Edge *edge
-        cdef np.int64_t i
         cdef double length
         cdef int_t ii
+        cdef np.int64_t offset1 = self.nEx
+        cdef np.int64_t offset2 = offset1+self.nEy
 
         for it in self.tree.edges_x:
             edge = it.second
@@ -581,14 +890,13 @@ cdef class _QuadTree:
                 continue
             ii = edge.index
             I[ii*2:ii*2+2] = ii
-            J[ii*2] = edge.points[0].index
+            J[ii*2  ] = edge.points[0].index
             J[ii*2+1] = edge.points[1].index
 
-            length = edge.length*self._scale_x
-            V[ii*2] = -1.0/length
+            length = edge.length*self._scale[0]
+            V[ii*2  ] = -1.0/length
             V[ii*2+1] = 1.0/length
 
-        cdef np.int64_t offset1 = self.nEx
         for it in self.tree.edges_y:
             edge = it.second
             if edge.hanging:
@@ -598,42 +906,122 @@ cdef class _QuadTree:
             J[ii*2] = edge.points[0].index
             J[ii*2+1] = edge.points[1].index
 
-            length = edge.length*self._scale_y
-            V[ii*2] = -1.0/length
+            length = edge.length*self._scale[1]
+            V[ii*2  ] = -1.0/length
             V[ii*2+1] = 1.0/length
 
-        Rn = self.deflate_nodes()
+        if(dim>2):
+            for it in self.tree.edges_z:
+                edge = it.second
+                if edge.hanging:
+                    continue
+                ii = edge.index+offset2
+                I[ii*2:ii*2+2] = ii
+                J[ii*2  ] = edge.points[0].index
+                J[ii*2+1] = edge.points[1].index
+
+                length = edge.length*self._scale[1]
+                V[ii*2  ] = -1.0/length
+                V[ii*2+1] = 1.0/length
+
+
+        Rn = self._deflate_nodes()
         G = sp.csr_matrix((V, (I, J)))
         return G*Rn
 
-    def deflate_nodes(self):
-        cdef np.int64_t[:] I = np.empty(self.nN+2*self.nhN, dtype=np.int64)
-        cdef np.int64_t[:] J = np.empty(self.nN+2*self.nhN, dtype=np.int64)
-        cdef np.float64_t[:] V = np.empty(self.nN+2*self.nhN, dtype=np.float64)
+    def _deflate_nodes(self):
+        cdef np.int64_t[:] I = np.empty(4*self.ntN, dtype=np.int64)
+        cdef np.int64_t[:] J = np.empty(4*self.ntN, dtype=np.int64)
+        cdef np.float64_t[:] V = np.empty(4*self.ntN, dtype=np.float64)
 
         # I is output index
         # J is input index
         cdef Node *node
         cdef np.int64_t ii
-        cdef np.int64_t offset = self.nN
 
         for it in self.tree.nodes:
             node = it.second
+            ii = node.index
+            I[4*ii:4*ii+4] = node.index
             if node.hanging:
-                ii = 2*node.index-offset
-
-                I[ii:ii+2] = node.index
-                J[ii] = node.parents[0].index
-                J[ii+1] = node.parents[1].index
-                V[ii:ii+2] = 0.5
+                J[4*ii  ] = node.parents[0].index
+                J[4*ii+1] = node.parents[1].index
+                J[4*ii+2] = node.parents[2].index
+                J[4*ii+3] = node.parents[3].index
             else:
-                ii = node.index
-                I[ii] = ii
-                J[ii] = ii
-                V[ii] = 1.0
+                J[4*ii:4*ii+4] = ii
+            V[4*ii:4*ii+4] = 0.25
 
         return sp.csr_matrix((V, (I, J)))
 
+    def edgeCurl(self):
+        cdef:
+            int_t dim = self.dim
+            np.int64_t[:] I = np.empty(4*self.nF, dtype=np.int64)
+            np.int64_t[:] J = np.empty(4*self.nF, dtype=np.int64)
+            np.float64_t[:] V = np.empty(4*self.nF, dtype=np.float64)
+            Face *face
+            int_t ii
+            int_t face_offset_y = self.nFx
+            int_t face_offset_z = self.nFx+self.nFy
+            int_t edge_offset_y = self.nEx
+            int_t edge_offset_z = self.nEx+self.nEy
+            double area
+
+        for it in self.tree.faces_x:
+            face = it.second
+            if face.hanging:
+                continue
+            ii = face.index
+            I[4*ii:4*ii+4] = ii
+            J[4*ii  ] = face.edges[0].index+edge_offset_z
+            J[4*ii+1] = face.edges[1].index+edge_offset_y
+            J[4*ii+2] = face.edges[2].index+edge_offset_z
+            J[4*ii+3] = face.edges[3].index+edge_offset_y
+
+            area = face.area*self._scale[1]*self._scale[2]
+            V[4*ii  ] = face.edges[0].length*self._scale[2]/area
+            V[4*ii+1] = face.edges[1].length*self._scale[1]/area
+            V[4*ii+2] = -face.edges[2].length*self._scale[2]/area
+            V[4*ii+3] = -face.edges[3].length*self._scale[1]/area
+
+        for it in self.tree.faces_y:
+            face = it.second
+            if face.hanging:
+                continue
+            ii = face.index+face_offset_y
+            I[4*ii:4*ii+4] = ii
+            J[4*ii  ] = face.edges[0].index+edge_offset_z
+            J[4*ii+1] = face.edges[1].index
+            J[4*ii+2] = face.edges[2].index+edge_offset_z
+            J[4*ii+3] = face.edges[3].index
+
+            area = face.area*self._scale[0]*self._scale[2]
+            V[4*ii  ] = face.edges[0].length*self._scale[2]/area
+            V[4*ii+1] = face.edges[1].length*self._scale[0]/area
+            V[4*ii+2] = -face.edges[2].length*self._scale[2]/area
+            V[4*ii+3] = -face.edges[3].length*self._scale[0]/area
+
+        for it in self.tree.faces_z:
+            face = it.second
+            if face.hanging:
+                continue
+            ii = face.index+face_offset_z
+            I[4*ii:4*ii+4] = ii
+            J[4*ii  ] = face.edges[0].index+edge_offset_y
+            J[4*ii+1] = face.edges[1].index
+            J[4*ii+2] = face.edges[2].index+edge_offset_y
+            J[4*ii+3] = face.edges[3].index
+
+            area = face.area*self._scale[0]*self._scale[1]
+            V[4*ii  ] = face.edges[0].length*self._scale[1]/area
+            V[4*ii+1] = face.edges[1].length*self._scale[0]/area
+            V[4*ii+2] = -face.edges[2].length*self._scale[1]/area
+            V[4*ii+3] = -face.edges[3].length*self._scale[0]/area
+
+        C = sp.csr_matrix((V, (I, J)))
+        R = self._deflate_edges()
+        return C*R
 
     @property
     def aveFx2CC(self):
@@ -928,8 +1316,8 @@ cdef class _QuadTree:
             fig = ax.figure
 
         cdef:
-            double scale_x = self._scale_x
-            double scale_y = self._scale_y
+            double scale_x = self._scale[0]
+            double scale_y = self._scale[1]
             double shift_x = self.x0[0]
             double shift_y = self.x0[1]
             Node *p1
@@ -996,7 +1384,10 @@ class QuadTree(_QuadTree, BaseTensorMesh):
         if max_level is None:
             max_level = int(np.log2(len(self._h[0])))
 
-        xF = np.array([self.vectorNx[-1], self.vectorNy[-1]])
+        if(self.dim==2):
+            xF = np.array([self.vectorNx[-1], self.vectorNy[-1]])
+        else:
+            xF = np.array([self.vectorNx[-1], self.vectorNy[-1], self.vectorNz[-1]])
         ws = xF-self.x0
 
         # Now can initialize quadtree parent
