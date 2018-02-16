@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tree_ext import QuadTree as Tree
 from time import time
+from vtk_writer import writeVTK, write_points
 
 from discretize import TreeMesh
 
@@ -12,7 +13,7 @@ cartF3 = lambda M, fx, fy, fz: np.vstack((cart_row3(M.gridFx, fx, fy, fz), cart_
 cartE3 = lambda M, ex, ey, ez: np.vstack((cart_row3(M.gridEx, ex, ey, ez), cart_row3(M.gridEy, ex, ey, ez), cart_row3(M.gridEz, ex, ey, ez)))
 
 def go():
-    nc = 16
+    nc = 64
     level = int(np.log2(nc))
     h = [nc, nc, nc]
 
@@ -63,60 +64,130 @@ def go():
     print("nE", dTree.nEx, dTree.nEy, dTree.nEz)
     print("nF", dTree.nFx, dTree.nFy, dTree.nFz)
 
-    print(np.allclose(tree.gridCC, dTree.gridCC))
-    print(np.allclose(np.sort(tree.gridN), np.sort(tree.gridN)))
-    print(np.allclose(np.sort(tree.gridFx), np.sort(tree.gridFx)))
-    print(np.allclose(np.sort(tree.gridFy), np.sort(tree.gridFy)))
-    print(np.allclose(np.sort(tree.gridFz), np.sort(tree.gridFz)))
-    print(np.allclose(np.sort(tree.gridEx), np.sort(tree.gridEx)))
-    print(np.allclose(np.sort(tree.gridEy), np.sort(tree.gridEy)))
-    print(np.allclose(np.sort(tree.gridEz), np.sort(tree.gridEz)))
+    grid1, grid2 = tree.gridCC, dTree.gridCC
+    print("Same gridCC", np.allclose(grid1, grid2))
+
+    grid1, grid2 = tree.gridN, dTree.gridN
+    order1 = np.lexsort((grid1[:, 2], grid1[:, 1], grid1[:, 0]))
+    order2 = np.lexsort((grid2[:, 2], grid2[:, 1], grid2[:, 0]))
+    print("Same gridN", np.allclose(grid1[order1], grid2[order2]))
+
+    grid1, grid2 = tree.gridEx, dTree.gridEx
+    order1 = np.lexsort((grid1[:, 2], grid1[:, 1], grid1[:, 0]))
+    order2 = np.lexsort((grid2[:, 2], grid2[:, 1], grid2[:, 0]))
+    print("Same gridEx", np.allclose(grid1[order1], grid2[order2]))
+
+    grid1, grid2 = tree.gridEy, dTree.gridEy
+    order1 = np.lexsort((grid1[:, 2], grid1[:, 1], grid1[:, 0]))
+    order2 = np.lexsort((grid2[:, 2], grid2[:, 1], grid2[:, 0]))
+    print("Same gridEy", np.allclose(grid1[order1], grid2[order2]))
+
+    grid1, grid2 = tree.gridEz, dTree.gridEz
+    order1 = np.lexsort((grid1[:, 2], grid1[:, 1], grid1[:, 0]))
+    order2 = np.lexsort((grid2[:, 2], grid2[:, 1], grid2[:, 0]))
+    print("Same gridEz", np.allclose(grid1[order1], grid2[order2]))
+
+    grid1, grid2 = tree.gridFx, dTree.gridFx
+    order1 = np.lexsort((grid1[:, 2], grid1[:, 1], grid1[:, 0]))
+    order2 = np.lexsort((grid2[:, 2], grid2[:, 1], grid2[:, 0]))
+    print("Same gridFx", np.allclose(grid1[order1], grid2[order2]))
+
+    grid1, grid2 = tree.gridFy, dTree.gridFy
+    order1 = np.lexsort((grid1[:, 2], grid1[:, 1], grid1[:, 0]))
+    order2 = np.lexsort((grid2[:, 2], grid2[:, 1], grid2[:, 0]))
+    print("Same gridFy", np.allclose(grid1[order1], grid2[order2]))
+
+    grid1, grid2 = tree.gridFz, dTree.gridFz
+    order1 = np.lexsort((grid1[:, 2], grid1[:, 1], grid1[:, 0]))
+    order2 = np.lexsort((grid2[:, 2], grid2[:, 1], grid2[:, 0]))
+    print("Same gridFz", np.allclose(grid1[order1], grid2[order2]))
+
+    #grid = tree.gridNparentsh()
+    #print(grid.shape)
+    """
+    write_points(grid, "test.vtp")
+
+    grid = tree.gridNwithparentsh()
+    write_points(grid, "test2.vtp")
+
+    write_points(tree.gridN, "Tree.vtp")
+    write_points(dTree.gridN, "TreeMesh.vtp")
+
+    writeVTK(tree, 'MyTree.vtu')
+    writeVTK(dTree, 'TreeMesh.vtu')
+    """
 
     """
     plt.figure()
-    tree.plotGrid(nodes=True)
+    tree.plotGrid()
     plt.figure()
-    dTree.plotGrid(nodes=True)
+    dTree.plotGrid()
     plt.show()
-
-
+    """
     # Face Divergence test
-    fx = lambda x, y: np.sin(2*np.pi*x)
-    fy = lambda x, y: np.sin(2*np.pi*y)
-    sol = lambda x, y: 2*np.pi*(np.cos(2*np.pi*x)+np.cos(2*np.pi*y))
+    fx = lambda x, y, z: np.sin(2*np.pi*x)
+    fy = lambda x, y, z: np.sin(2*np.pi*y)
+    fz = lambda x, y, z: np.sin(2*np.pi*z)
+    sol = lambda x, y, z: (2*np.pi*np.cos(2*np.pi*x)+2*np.pi*np.cos(2*np.pi*y)+2*np.pi*np.cos(2*np.pi*z))
 
-    divF_ana = call2(sol, tree.gridCC)
-    Fc1 = cartF2(tree, fx, fy)
-    F1 = tree.projectFaceVector(Fc1)
+    Fc = cartF3(tree, fx, fy, fz)
+    F = tree.projectFaceVector(Fc)
 
-    divF = tree.faceDiv.dot(F1)
-    print('QuadTree Dnorm:', np.linalg.norm(divF-divF_ana))
+    divF = tree.faceDiv.dot(F)
+    divF_ana = call3(sol, tree.gridCC)
+    print('Tree Dnorm:', np.linalg.norm(divF-divF_ana))
 
-    Fc2 = cartF2(dTree, fx, fy)
-    F2 = dTree.projectFaceVector(Fc2)
-    divF2 = dTree.faceDiv.dot(F2)
-    divF_ana2 = call2(sol, dTree.gridCC)
+    Fc = cartF3(dTree, fx, fy, fz)
+    F = dTree.projectFaceVector(Fc)
 
-    print('TreeMesh Dnorm:', np.linalg.norm(divF2-divF_ana2))
+    divF = dTree.faceDiv.dot(F)
+    divF_ana = call3(sol, dTree.gridCC)
+
+    print('TreeMesh Dnorm:', np.linalg.norm(divF-divF_ana))
 
     # Nodal gradient test
-    fun = lambda x, y: (np.cos(x)+np.cos(y))
-    solX = lambda x, y: -np.sin(x)
-    solY = lambda x, y: -np.sin(y)
+    fun = lambda x, y, z: (np.cos(x)+np.cos(y)+np.cos(z))
+    # i (sin(x)) + j (sin(y)) + k (sin(z))
+    solX = lambda x, y, z: -np.sin(x)
+    solY = lambda x, y, z: -np.sin(y)
+    solZ = lambda x, y, z: -np.sin(z)
 
-    G = tree.nodalGrad
-    gradE_ana = tree.projectEdgeVector(cartE2(tree, solX, solY))
-    fn = call2(fun, tree.gridN)
-    gradE = G*fn
-    print('QuadTree Gnorm:', np.linalg.norm(gradE-gradE_ana))
+    phi = call3(fun, tree.gridN)
+    gradE = tree.nodalGrad.dot(phi)
+    Ec = cartE3(tree, solX, solY, solZ)
+    gradE_ana = tree.projectEdgeVector(Ec)
+    print('Tree Gnorm:', np.linalg.norm(gradE-gradE_ana))
 
-    dG = dTree.nodalGrad
-    fn2 = call2(fun, dTree.gridN)
-    gradE_ana2 = dTree.projectEdgeVector(cartE2(dTree, solX, solY))
-    gradE2 = dG.dot(fn2)
+    phi = call3(fun, dTree.gridN)
+    gradE = dTree.nodalGrad.dot(phi)
+    Ec = cartE3(dTree, solX, solY, solZ)
+    gradE_ana = dTree.projectEdgeVector(Ec)
+    print('TreeMesh Gnorm:', np.linalg.norm(gradE-gradE_ana))
+    # """
 
-    print('TreeMesh Gnorm:', np.linalg.norm(gradE2-gradE_ana2))
-    """
+    funX = lambda x, y, z: np.cos(2*np.pi*y)
+    funY = lambda x, y, z: np.cos(2*np.pi*z)
+    funZ = lambda x, y, z: np.cos(2*np.pi*x)
+
+    solX = lambda x, y, z: 2*np.pi*np.sin(2*np.pi*z)
+    solY = lambda x, y, z: 2*np.pi*np.sin(2*np.pi*x)
+    solZ = lambda x, y, z: 2*np.pi*np.sin(2*np.pi*y)
+
+    Ec = cartE3(tree, funX, funY, funZ)
+    E = tree.projectEdgeVector(Ec)
+    Fc = cartF3(tree, solX, solY, solZ)
+    curlE_ana = tree.projectFaceVector(Fc)
+    C = tree.edgeCurl
+    curlE = C.dot(E)
+    print('Tree Cnorm:', np.linalg.norm((curlE - curlE_ana)))
+
+    Ec = cartE3(dTree, funX, funY, funZ)
+    E = dTree.projectEdgeVector(Ec)
+    Fc = cartF3(dTree, solX, solY, solZ)
+    curlE_ana = dTree.projectFaceVector(Fc)
+    C = dTree.edgeCurl
+    curlE = C.dot(E)
+    print('TreeMesh Cnorm:', np.linalg.norm((curlE - curlE_ana)))
 
 if __name__=='__main__':
     go()

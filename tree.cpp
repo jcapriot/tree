@@ -95,7 +95,7 @@ Face::Face(Node& p1, Node& p2, Node& p3, Node& p4){
     location[0] = x;
     location[1] = y;
     location[2] = z;
-    int_t length = (p2[0]-p1[0])+(p2[1]-p1[1])+(p2[2]-p1[1]);
+    int_t length = (p2[0]-p1[0])+(p2[1]-p1[1])+(p2[2]-p1[2]);
     area = length*length;
     reference = 0;
     hanging = false;
@@ -591,7 +591,7 @@ void Tree::build_tree(function test_func){
     root->build_cell_vector(cells);
 
     if(n_dim==3){
-        //Generate Faces and edges
+        // Generate Faces and edges
         for(std::vector<Cell *>::size_type i =0; i!= cells.size(); i++){
             Cell *cell = cells[i];
             Node *p1 = cell->points[0];
@@ -680,15 +680,16 @@ void Tree::build_tree(function test_func){
             cell->edges[10] = ez3;
             cell->edges[11] = ez4;
 
-            fx1->reference++;
-            fx2->reference++;
-            fy1->reference++;
-            fy2->reference++;
-            fz1->reference++;
-            fz2->reference++;
+            for(int_t it = 0; it<6; ++it)
+                cell->faces[it]->reference++;
+            for(int_t it = 0; it<8; ++it)
+                cell->points[it]->reference++;
+            for(int_t it = 0; it<12; ++it)
+                cell->edges[it]->reference++;
 
         }
-        //Process hanging x faces
+
+        // Process hanging x faces
         for(face_it_type it = faces_x.begin(); it!= faces_x.end(); ++it){
             Face *face = it->second;
             if(face->reference<2){
@@ -699,12 +700,12 @@ void Tree::build_tree(function test_func){
                 Node *node;
 
                 //Find Parent
-                int_t parent_node;
+                int_t ip;
                 for(int_t i=0;i<4;++i){
                     node = face->points[i];
                     if(faces_x.count(node->key)){
                         face->parent = faces_x.at(node->key);
-                        parent_node = i;
+                        ip = i;
                         break;
                     }
                 }
@@ -715,9 +716,9 @@ void Tree::build_tree(function test_func){
                 }
                 // the point oposite the parent node key should not be hanging
                 // and also label the edges' parents
-                if(parent_node==0){
-                    face->points[3]->hanging = false;
-
+                if(face->points[ip^3]->reference!=6)
+                    face->points[ip^3]->hanging = false;
+                if(ip==0){
                     face->edges[0]->parents[0] = face->parent->edges[0];
                     face->edges[0]->parents[1] = face->parent->edges[2];
 
@@ -740,9 +741,7 @@ void Tree::build_tree(function test_func){
                     face->points[2]->parents[2] = face->parent->points[2];
                     face->points[2]->parents[3] = face->parent->points[3];
 
-                }else if(parent_node==1){
-                    face->points[2]->hanging = false;
-
+                }else if(ip==1){
                     face->edges[0]->parents[0] = face->parent->edges[0];
                     face->edges[0]->parents[1] = face->parent->edges[0];
 
@@ -764,9 +763,7 @@ void Tree::build_tree(function test_func){
                     face->points[3]->parents[1] = face->parent->points[3];
                     face->points[3]->parents[2] = face->parent->points[2];
                     face->points[3]->parents[3] = face->parent->points[3];
-                }else if(parent_node==2){
-                    face->points[1]->hanging = false;
-
+                }else if(ip==2){
                     face->edges[0]->parents[0] = face->parent->edges[0];
                     face->edges[0]->parents[1] = face->parent->edges[2];
 
@@ -789,8 +786,6 @@ void Tree::build_tree(function test_func){
                     face->points[3]->parents[2] = face->parent->points[1];
                     face->points[3]->parents[3] = face->parent->points[3];
                 }else{
-                    face->points[0]->hanging = false;
-
                     face->edges[0]->parents[0] = face->parent->edges[0];
                     face->edges[0]->parents[1] = face->parent->edges[0];
 
@@ -821,7 +816,7 @@ void Tree::build_tree(function test_func){
             }
         }
 
-        //Process hanging y faces
+        // Process hanging y faces
         for(face_it_type it = faces_y.begin(); it!= faces_y.end(); ++it){
             Face *face = it->second;
             if(face->reference<2){
@@ -839,28 +834,25 @@ void Tree::build_tree(function test_func){
                 Node *node;
 
                 //Find Parent
-                int_t parent_node;
+                int_t ip;
                 for(int_t i=0;i<4;++i){
                     node = face->points[i];
                     if(faces_y.count(node->key)){
                         face->parent = faces_y.at(node->key);
-                        parent_node = i;
+                        ip = i;
                         break;
                     }
                 }
-                //all of my edges are hanging
+                //all of my edges are hanging, and most of my points
                 for(int_t i=0;i<4;++i){
                     face->edges[i]->hanging = true;
-                }
-
-                for(int_t i=0;i<4;++i){
                     face->points[i]->hanging = true;
                 }
-                //the point oposite the parent node key should not be hanging
-                // and also determin parents of edges and nodes
-                if(parent_node==0){
-                    face->points[3]->hanging = false;
-
+                // the point oposite the parent node key should not be hanging
+                // and also label the edges' parents
+                if(face->points[ip^3]->reference!=6)
+                    face->points[ip^3]->hanging = false;
+                if(ip==0){
                     face->edges[0]->parents[0] = face->parent->edges[0];
                     face->edges[0]->parents[1] = face->parent->edges[2];
 
@@ -883,9 +875,7 @@ void Tree::build_tree(function test_func){
                     face->points[2]->parents[2] = face->parent->points[2];
                     face->points[2]->parents[3] = face->parent->points[3];
 
-                }else if(parent_node==1){
-                    face->points[2]->hanging = false;
-
+                }else if(ip==1){
                     face->edges[0]->parents[0] = face->parent->edges[0];
                     face->edges[0]->parents[1] = face->parent->edges[0];
 
@@ -907,9 +897,7 @@ void Tree::build_tree(function test_func){
                     face->points[3]->parents[1] = face->parent->points[3];
                     face->points[3]->parents[2] = face->parent->points[2];
                     face->points[3]->parents[3] = face->parent->points[3];
-                }else if(parent_node==2){
-                    face->points[1]->hanging = false;
-
+                }else if(ip==2){
                     face->edges[0]->parents[0] = face->parent->edges[0];
                     face->edges[0]->parents[1] = face->parent->edges[2];
 
@@ -932,8 +920,6 @@ void Tree::build_tree(function test_func){
                     face->points[3]->parents[2] = face->parent->points[1];
                     face->points[3]->parents[3] = face->parent->points[3];
                 }else{
-                    face->points[0]->hanging = false;
-
                     face->edges[0]->parents[0] = face->parent->edges[0];
                     face->edges[0]->parents[1] = face->parent->edges[0];
 
@@ -965,7 +951,7 @@ void Tree::build_tree(function test_func){
             }
         }
 
-        //Process hanging z faces
+        // Process hanging z faces
         for(face_it_type it = faces_z.begin(); it!= faces_z.end(); ++it){
             Face *face = it->second;
             if(face->reference<2){
@@ -983,28 +969,25 @@ void Tree::build_tree(function test_func){
                 Node *node;
 
                 //Find Parent
-                int_t parent_node;
+                int_t ip;
                 for(int_t i=0;i<4;++i){
                     node = face->points[i];
                     if(faces_z.count(node->key)){
                         face->parent = faces_z.at(node->key);
-                        parent_node = i;
+                        ip = i;
                         break;
                     }
                 }
-                //all of my edges are hanging
+                //all of my edges are hanging, and most of my points
                 for(int_t i=0;i<4;++i){
                     face->edges[i]->hanging = true;
-                }
-
-                for(int_t i=0;i<4;++i){
                     face->points[i]->hanging = true;
                 }
-                //the point oposite the parent node key should not be hanging
-                // and also label the edges
-                if(parent_node==0){
-                    face->points[3]->hanging = false;
-
+                // the point oposite the parent node key should not be hanging
+                // and also label the edges' parents
+                if(face->points[ip^3]->reference!=6)
+                    face->points[ip^3]->hanging = false;
+                if(ip==0){
                     face->edges[0]->parents[0] = face->parent->edges[0];
                     face->edges[0]->parents[1] = face->parent->edges[2];
 
@@ -1027,9 +1010,7 @@ void Tree::build_tree(function test_func){
                     face->points[2]->parents[2] = face->parent->points[2];
                     face->points[2]->parents[3] = face->parent->points[3];
 
-                }else if(parent_node==1){
-                    face->points[2]->hanging = false;
-
+                }else if(ip==1){
                     face->edges[0]->parents[0] = face->parent->edges[0];
                     face->edges[0]->parents[1] = face->parent->edges[0];
 
@@ -1051,9 +1032,7 @@ void Tree::build_tree(function test_func){
                     face->points[3]->parents[1] = face->parent->points[3];
                     face->points[3]->parents[2] = face->parent->points[2];
                     face->points[3]->parents[3] = face->parent->points[3];
-                }else if(parent_node==2){
-                    face->points[1]->hanging = false;
-
+                }else if(ip==2){
                     face->edges[0]->parents[0] = face->parent->edges[0];
                     face->edges[0]->parents[1] = face->parent->edges[2];
 
@@ -1076,8 +1055,6 @@ void Tree::build_tree(function test_func){
                     face->points[3]->parents[2] = face->parent->points[1];
                     face->points[3]->parents[3] = face->parent->points[3];
                 }else{
-                    face->points[0]->hanging = false;
-
                     face->edges[0]->parents[0] = face->parent->edges[0];
                     face->edges[0]->parents[1] = face->parent->edges[0];
 
@@ -1181,7 +1158,6 @@ void Tree::build_tree(function test_func){
         }
     }
 
-
     //List hanging edges x
     for(edge_it_type it = edges_x.begin(); it != edges_x.end(); ++it){
         Edge *edge = it->second;
@@ -1190,7 +1166,7 @@ void Tree::build_tree(function test_func){
         }
     }
     //List hanging edges y
-    for(edge_it_type it = edges_x.begin(); it != edges_x.end(); ++it){
+    for(edge_it_type it = edges_y.begin(); it != edges_y.end(); ++it){
         Edge *edge = it->second;
         if(edge->hanging){
             hanging_edges_y.push_back(edge);
@@ -1198,7 +1174,7 @@ void Tree::build_tree(function test_func){
     }
     if(n_dim==3){
         //List hanging edges z
-        for(edge_it_type it = edges_x.begin(); it != edges_x.end(); ++it){
+        for(edge_it_type it = edges_z.begin(); it != edges_z.end(); ++it){
             Edge *edge = it->second;
             if(edge->hanging){
                 hanging_edges_z.push_back(edge);

@@ -10,19 +10,31 @@ import numpy as np
 cdef class Cell:
     cdef double _x, _y, _z, _x0, _y0, _z0, _wx, _wy, _wz
     cdef int_t _dim
-    def __cinit__(self, double x, double y, double z,
-                  double x0, double y0, double z0, int_t dim):
-        self._dim = dim
-        self._x = x
-        self._y = y
-        self._x0 = x0
-        self._y0 = y0
-        self._wx = 2*(x-x0)
-        self._wy = 2*(y-y0)
-        if(dim>2):
-            self._z0 = z0
-            self._z = z
-            self._wz = 2*(z-z0)
+    cdef c_Cell* _cell
+    cdef void _set(self, c_Cell* cell, double* scale, double* shift):
+        self._dim = cell.n_dim
+        self._cell = cell
+        self._x = cell.center[0]*scale[0]+shift[0]
+        self._y = cell.center[1]*scale[1]+shift[1]
+        self._x0 = cell.points[0].location[0]*scale[0]+shift[0]
+        self._y0 = cell.points[0].location[1]*scale[1]+shift[1]
+        self._wx = 2*(self._x-self._x0)
+        self._wy = 2*(self._y-self._y0)
+        if(self._dim>2):
+            self._z0 = cell.points[0].location[2]*scale[2]+shift[2]
+            self._z = cell.center[2]*scale[2]+shift[2]
+            self._wz = 2*(self._z-self._z0)
+
+    @property
+    def nodes(self):
+        cdef c_Cell* cell = self._cell
+        if self._dim>2:
+            return tuple((cell.points[0].index, cell.points[1].index,
+                          cell.points[2].index, cell.points[3].index,
+                          cell.points[4].index, cell.points[5].index,
+                          cell.points[6].index, cell.points[7].index))
+        return tuple((cell.points[0].index, cell.points[1].index,
+                      cell.points[2].index, cell.points[3].index))
 
     @property
     def center(self):
@@ -35,28 +47,24 @@ cdef class Cell:
         return tuple((self._x0, self._y0))
 
     @property
-    def width(self):
+    def h(self):
         if self._dim>2: return tuple((self._wx, self._wy, self._wz))
         return tuple((self._wx, self._wy))
 
+    @property
+    def dim(self):
+        return self._dim
 
 cdef int_t _evaluate_func(void* obj, void* function, c_Cell* cell) with gil:
     self = <object> obj
     func = <object> function
-    cdef double x, y, z, x0, y0, z0
-    scale = self.scale
-    shift = self.x0
-    cdef int_t dim = self.dim
-    x = cell.center[0]*scale[0]+shift[0]
-    y = cell.center[1]*scale[1]+shift[1]
-    x0 = cell.points[0].location[0]*scale[0] + shift[0]
-    y0 = cell.points[0].location[1]*scale[1] + shift[1]
-    if(dim>2):
-        z = cell.center[2]*scale[2]+shift[2]
-        z0 = cell.points[0].location[2]*scale[2]+shift[2]
-        pycell = Cell(x, y, z, x0, y0, z0, dim)
-    else:
-        pycell = Cell(x, y, 0, x0, y0, 0, dim)
+    cdef double[3] scale, shift
+    cdef int_t i
+    for i in range(cell.n_dim):
+        scale[i] = self.scale[i]
+        shift[i] = self.x0[i]
+    pycell = Cell()
+    pycell._set(cell, &scale[0], &shift[0])
     return <int_t> func(pycell)
 
 cdef struct double4:
@@ -633,7 +641,8 @@ cdef class _QuadTree:
 
         for cell in self.tree.cells:
             edges = cell.edges
-            I[i*4:i*4+4] = cell.index
+            i = cell.index
+            I[i*4:i*4+4] = i
             J[i*4  ] = edges[0].index #y edge, x face
             J[i*4+1] = edges[1].index+offset #x edge, y face (add offset)
             J[i*4+2] = edges[2].index #y edge, x face
@@ -644,7 +653,6 @@ cdef class _QuadTree:
             V[i*4+1] = edges[1].length*self._scale[0]/volume
             V[i*4+2] = edges[2].length*self._scale[1]/volume
             V[i*4+3] = -(edges[3].length*self._scale[0]/volume)
-            i += 1
         return sp.csr_matrix((V, (I, J)))
 
     def _faceDiv3D(self):
@@ -657,11 +665,12 @@ cdef class _QuadTree:
             Face *faces[6]
             np.int64_t offset1 = self.tree.faces_x.size()
             np.int64_t offset2 = offset1+self.tree.faces_y.size()
-            double volume
+            double volume, fx_area, fy_area, fz_area
 
         for cell in self.tree.cells:
             faces = cell.faces
-            I[i*6:i*6+6] = cell.index
+            i = cell.index
+            I[i*6:i*6+6] = i
             J[i*6  ] = faces[0].index #x1 face
             J[i*6+1] = faces[1].index #x2 face
             J[i*6+2] = faces[2].index+offset1 #y face (add offset1)
@@ -670,13 +679,15 @@ cdef class _QuadTree:
             J[i*6+5] = faces[5].index+offset2 #z face (add offset2)
 
             volume = cell.volume*self._scale[0]*self._scale[1]*self._scale[2]
-            V[i*6  ] = -(faces[0].area*self._scale[1]*self.scale[2])/volume
-            V[i*6+1] = (faces[1].area*self._scale[1]*self.scale[2])/volume
-            V[i*6+2] = -(faces[2].area*self._scale[0]*self.scale[2])/volume
-            V[i*6+3] = (faces[3].area*self._scale[0]*self.scale[2])/volume
-            V[i*6+4] = -(faces[4].area*self._scale[0]*self.scale[1])/volume
-            V[i*6+5] = (faces[5].area*self._scale[0]*self.scale[1])/volume
-            i += 1
+            fx_area = faces[0].area*self._scale[1]*self.scale[2]
+            fy_area = faces[2].area*self._scale[0]*self.scale[2]
+            fz_area = faces[4].area*self._scale[0]*self.scale[1]
+            V[i*6  ] = -(fx_area)/volume
+            V[i*6+1] =  (fx_area)/volume
+            V[i*6+2] = -(fy_area)/volume
+            V[i*6+3] =  (fy_area)/volume
+            V[i*6+4] = -(fz_area)/volume
+            V[i*6+5] =  (fz_area)/volume
         return sp.csr_matrix((V, (I, J)))
 
     @property
@@ -738,11 +749,18 @@ cdef class _QuadTree:
                 J[2*ii  ] = edge.parents[0].index
                 J[2*ii+1] = edge.parents[1].index
             else:
-                J[2*ii] = ii
+                J[2*ii  ] = ii
                 J[2*ii+1] = ii
             V[2*ii  ] = 0.5
             V[2*ii+1] = 0.5
-        return sp.csr_matrix((V, (I, J)))
+        Rh = sp.csr_matrix((V, (I, J)), shape=(self.ntEx, self.ntEx))
+        # Test if it needs to be deflated again, (if any parents were also hanging)
+        last_ind = max(np.nonzero(Rh.getnnz(0)>0)[0][-1], self.nEx)
+        while(last_ind > self.nEx):
+            Rh = Rh*Rh
+            last_ind = max(np.nonzero(Rh.getnnz(0)>0)[0][-1], self.nEx)
+        Rh = Rh[:,:last_ind]
+        return Rh
 
     def _deflate_edges_y(self):
         #I is output index (with hanging)
@@ -763,11 +781,18 @@ cdef class _QuadTree:
                 J[2*ii  ] = edge.parents[0].index
                 J[2*ii+1] = edge.parents[1].index
             else:
-                J[2*ii] = ii
+                J[2*ii  ] = ii
                 J[2*ii+1] = ii
             V[2*ii  ] = 0.5
             V[2*ii+1] = 0.5
-        return sp.csr_matrix((V, (I, J)))
+        Rh = sp.csr_matrix((V, (I, J)), shape=(self.ntEy, self.ntEy))
+        # Test if it needs to be deflated again, (if any parents were also hanging)
+        last_ind = max(np.nonzero(Rh.getnnz(0)>0)[0][-1], self.nEy)
+        while(last_ind > self.nEy):
+            Rh = Rh*Rh
+            last_ind = max(np.nonzero(Rh.getnnz(0)>0)[0][-1], self.nEy)
+        Rh = Rh[:,:last_ind]
+        return Rh
 
     def _deflate_edges_z(self):
         #I is output index (with hanging)
@@ -788,11 +813,18 @@ cdef class _QuadTree:
                 J[2*ii  ] = edge.parents[0].index
                 J[2*ii+1] = edge.parents[1].index
             else:
-                J[2*ii] = ii
+                J[2*ii  ] = ii
                 J[2*ii+1] = ii
             V[2*ii  ] = 0.5
             V[2*ii+1] = 0.5
-        return sp.csr_matrix((V, (I, J)))
+        Rh = sp.csr_matrix((V, (I, J)), shape=(self.ntEz, self.ntEz))
+        # Test if it needs to be deflated again, (if any parents were also hanging)
+        last_ind = max(np.nonzero(Rh.getnnz(0)>0)[0][-1], self.nEz)
+        while(last_ind > self.nEz):
+            Rh = Rh*Rh
+            last_ind = max(np.nonzero(Rh.getnnz(0)>0)[0][-1], self.nEz)
+        Rh = Rh[:,:last_ind]
+        return Rh
 
     def _deflate_edges(self):
         Rx = self._deflate_edges_x()
@@ -825,7 +857,7 @@ cdef class _QuadTree:
             ii = face.index
             I[ii] = ii
             if face.hanging:
-                J[4*ii] = face.parent.index
+                J[ii] = face.parent.index
             else:
                 J[ii] = ii
             V[ii] = 1.0
@@ -845,7 +877,7 @@ cdef class _QuadTree:
             ii = face.index
             I[ii] = ii
             if face.hanging:
-                J[4*ii] = face.parent.index
+                J[ii] = face.parent.index
             else:
                 J[ii] = ii
             V[ii] = 1.0
@@ -865,7 +897,7 @@ cdef class _QuadTree:
             ii = face.index
             I[ii] = ii
             if face.hanging:
-                J[4*ii] = face.parent.index
+                J[ii] = face.parent.index
             else:
                 J[ii] = ii
             V[ii] = 1.0
@@ -874,9 +906,9 @@ cdef class _QuadTree:
     @property
     def nodalGrad(self):
         cdef int_t dim = self.dim
-        cdef np.int64_t[:] I = np.empty(self.nE*dim, dtype=np.int64)
-        cdef np.int64_t[:] J = np.empty(self.nE*dim, dtype=np.int64)
-        cdef np.float64_t[:] V = np.empty(self.nE*dim, dtype=np.float64)
+        cdef np.int64_t[:] I = np.empty(2*self.nE, dtype=np.int64)
+        cdef np.int64_t[:] J = np.empty(2*self.nE, dtype=np.int64)
+        cdef np.float64_t[:] V = np.empty(2*self.nE, dtype=np.float64)
 
         cdef Edge *edge
         cdef double length
@@ -926,7 +958,7 @@ cdef class _QuadTree:
 
 
         Rn = self._deflate_nodes()
-        G = sp.csr_matrix((V, (I, J)))
+        G = sp.csr_matrix((V, (I, J)), shape=(self.nE, self.ntN))
         return G*Rn
 
     def _deflate_nodes(self):
@@ -937,12 +969,14 @@ cdef class _QuadTree:
         # I is output index
         # J is input index
         cdef Node *node
-        cdef np.int64_t ii
+        cdef np.int64_t ii, i, offset
+        offset = self.nN
+        cdef double[4] weights
 
         for it in self.tree.nodes:
             node = it.second
             ii = node.index
-            I[4*ii:4*ii+4] = node.index
+            I[4*ii:4*ii+4] = ii
             if node.hanging:
                 J[4*ii  ] = node.parents[0].index
                 J[4*ii+1] = node.parents[1].index
@@ -950,10 +984,18 @@ cdef class _QuadTree:
                 J[4*ii+3] = node.parents[3].index
             else:
                 J[4*ii:4*ii+4] = ii
-            V[4*ii:4*ii+4] = 0.25
+            V[4*ii:4*ii+4] = 0.25;
 
-        return sp.csr_matrix((V, (I, J)))
+        Rh = sp.csr_matrix((V, (I, J)), shape=(self.ntN, self.ntN))
+        # Test if it needs to be deflated again, (if any parents were also hanging)
+        last_ind = max(np.nonzero(Rh.getnnz(0)>0)[0][-1], self.nN)
+        while(last_ind > self.nN):
+            Rh = Rh*Rh;
+            last_ind = max(np.nonzero(Rh.getnnz(0)>0)[0][-1], self.nN)
+        Rh = Rh[:,:last_ind]
+        return Rh;
 
+    @property
     def edgeCurl(self):
         cdef:
             int_t dim = self.dim
@@ -964,8 +1006,8 @@ cdef class _QuadTree:
             int_t ii
             int_t face_offset_y = self.nFx
             int_t face_offset_z = self.nFx+self.nFy
-            int_t edge_offset_y = self.nEx
-            int_t edge_offset_z = self.nEx+self.nEy
+            int_t edge_offset_y = self.ntEx
+            int_t edge_offset_z = self.ntEx+self.ntEy
             double area
 
         for it in self.tree.faces_x:
@@ -980,10 +1022,10 @@ cdef class _QuadTree:
             J[4*ii+3] = face.edges[3].index+edge_offset_y
 
             area = face.area*self._scale[1]*self._scale[2]
-            V[4*ii  ] = face.edges[0].length*self._scale[2]/area
-            V[4*ii+1] = face.edges[1].length*self._scale[1]/area
-            V[4*ii+2] = -face.edges[2].length*self._scale[2]/area
-            V[4*ii+3] = -face.edges[3].length*self._scale[1]/area
+            V[4*ii  ] = (face.edges[0].length*self._scale[2]/area)
+            V[4*ii+1] = -(face.edges[1].length*self._scale[1]/area)
+            V[4*ii+2] = -(face.edges[2].length*self._scale[2]/area)
+            V[4*ii+3] = (face.edges[3].length*self._scale[1]/area)
 
         for it in self.tree.faces_y:
             face = it.second
@@ -997,10 +1039,10 @@ cdef class _QuadTree:
             J[4*ii+3] = face.edges[3].index
 
             area = face.area*self._scale[0]*self._scale[2]
-            V[4*ii  ] = face.edges[0].length*self._scale[2]/area
-            V[4*ii+1] = face.edges[1].length*self._scale[0]/area
-            V[4*ii+2] = -face.edges[2].length*self._scale[2]/area
-            V[4*ii+3] = -face.edges[3].length*self._scale[0]/area
+            V[4*ii  ] = (face.edges[0].length*self._scale[2]/area)
+            V[4*ii+1] = -(face.edges[1].length*self._scale[0]/area)
+            V[4*ii+2] = -(face.edges[2].length*self._scale[2]/area)
+            V[4*ii+3] = (face.edges[3].length*self._scale[0]/area)
 
         for it in self.tree.faces_z:
             face = it.second
@@ -1014,12 +1056,12 @@ cdef class _QuadTree:
             J[4*ii+3] = face.edges[3].index
 
             area = face.area*self._scale[0]*self._scale[1]
-            V[4*ii  ] = face.edges[0].length*self._scale[1]/area
-            V[4*ii+1] = face.edges[1].length*self._scale[0]/area
-            V[4*ii+2] = -face.edges[2].length*self._scale[1]/area
-            V[4*ii+3] = -face.edges[3].length*self._scale[0]/area
+            V[4*ii  ] = (face.edges[0].length*self._scale[1]/area)
+            V[4*ii+1] = -(face.edges[1].length*self._scale[0]/area)
+            V[4*ii+2] = -(face.edges[2].length*self._scale[1]/area)
+            V[4*ii+3] = (face.edges[3].length*self._scale[0]/area)
 
-        C = sp.csr_matrix((V, (I, J)))
+        C = sp.csr_matrix((V, (I, J)),shape=(self.nF, self.ntE))
         R = self._deflate_edges()
         return C*R
 
@@ -1218,9 +1260,9 @@ cdef class _QuadTree:
                     n_cells=3
             if n_cells != 0:
                 n_cells = 4
-                #then it is in a quadrilateral
+                # then it is in a quadrilateral
                 if x<cell.center[0]:
-                    if y<cell.center[1]: #lower left
+                    if y<cell.center[1]: # lower left
                         cells[1] = cell.neighbors[2]
                         if cells[1] != NULL and not cells[1].is_leaf():
                             cells[1] = cells[1].children[2]
@@ -1232,7 +1274,7 @@ cdef class _QuadTree:
                         cells[3] = cell.neighbors[0]
                         if cells[3] != NULL and not cells[3].is_leaf():
                             cells[3] = cells[3].children[1]
-                    else: #upper left
+                    else: # upper left
                         cells[1] = cell.neighbors[0]
                         if cells[1] != NULL and not cells[1].is_leaf():
                             cells[1] = cells[1].children[3]
@@ -1245,7 +1287,7 @@ cdef class _QuadTree:
                         if cells[3] != NULL and not cells[3].is_leaf():
                             cells[3] = cells[3].children[0]
                 else:
-                    if y<cell.center[1]: #lower right
+                    if y<cell.center[1]: # lower right
                         cells[1] = cell.neighbors[1]
                         if cells[1] != NULL and not cells[1].is_leaf():
                             cells[1] = cells[1].children[0]
@@ -1257,7 +1299,7 @@ cdef class _QuadTree:
                         cells[3] = cell.neighbors[2]
                         if cells[3] != NULL and not cells[3].is_leaf():
                             cells[3] = cells[3].children[3]
-                    else: #upper right
+                    else: # upper right
                         cells[1] = cell.neighbors[3]
                         if cells[1] != NULL and not cells[1].is_leaf():
                             cells[1] = cells[1].children[1]
@@ -1269,9 +1311,9 @@ cdef class _QuadTree:
                         cells[3] = cell.neighbors[1]
                         if cells[3] != NULL and not cells[3].is_leaf():
                             cells[3] = cells[3].children[2]
-            #now cells contains a list of the 3 or 4
-            #bounding cells to interpolate from
-            #just need to figure out the weights
+            # now cells contains a list of the 3 or 4
+            # bounding cells to interpolate from
+            # just need to figure out the weights
             get_weights(weights, x, y, cells, n_cells)
             I[4*i:4*i+4] = i
 
@@ -1309,42 +1351,103 @@ cdef class _QuadTree:
         facesX = False, facesY = False,
         edgesX = False, edgesY = False):
 
+        import matplotlib
         if ax is None:
             import matplotlib.pyplot as plt
-            ax = plt.subplot(111)
+            import matplotlib.colors as colors
+            import matplotlib.cm as cmx
+            if(self.dim==2):
+                ax = plt.subplot(111)
+            else:
+                from mpl_toolkits.mplot3d import Axes3D
+                ax = plt.subplot(111, projection='3d')
         else:
+            assert isinstance(ax,matplotlib.axes.Axes), "ax must be an Axes!"
             fig = ax.figure
 
         cdef:
             double scale_x = self._scale[0]
             double scale_y = self._scale[1]
-            double shift_x = self.x0[0]
-            double shift_y = self.x0[1]
+            double scale_z = self._scale[2]
+            double shift_x = self._shift[0]
+            double shift_y = self._shift[1]
+            double shift_z = self._shift[2]
+            int_t i, offset
             Node *p1
             Node *p2
-            Node *p3
-            Node *p4
+            Edge *edge
 
         if grid:
-            X,Y = [],[]
-            for cell in self.tree.cells:
-                p1 = cell.points[0]
-                p2 = cell.points[1]
-                p3 = cell.points[2]
-                p4 = cell.points[3]
-                X.extend([p1.location[0]*scale_x+shift_x,
-                          p3.location[0]*scale_x+shift_x,
-                          p4.location[0]*scale_x+shift_x,
-                          p2.location[0]*scale_x+shift_x,
-                          p1.location[0]*scale_x+shift_x,
-                          np.nan])
-                Y.extend([p1.location[1]*scale_y+shift_y,
-                          p3.location[1]*scale_y+shift_y,
-                          p4.location[1]*scale_y+shift_y,
-                          p2.location[1]*scale_y+shift_y,
-                          p1.location[1]*scale_y+shift_y,
-                          np.nan])
-            ax.plot(X, Y, 'b-')
+            if(self.dim)==2:
+                X = np.empty((self.nE*3,))
+                Y = np.empty((self.nE*3,))
+                for it in self.tree.edges_x:
+                    edge = it.second
+                    if(edge.hanging): continue
+                    i = edge.index*3
+                    p1 = edge.points[0]
+                    p2 = edge.points[1]
+                    X[i:i+3] = [p1.location[0],p2.location[0],np.nan]
+                    Y[i:i+3] = [p1.location[1],p2.location[1],np.nan]
+
+                offset = self.nEx
+                for it in self.tree.edges_y:
+                    edge = it.second
+                    if(edge.hanging): continue
+                    i = (edge.index+offset)*3
+                    p1 = edge.points[0]
+                    p2 = edge.points[1]
+                    X[i:i+3] = [p1.location[0],p2.location[0],np.nan]
+                    Y[i:i+3] = [p1.location[1],p2.location[1],np.nan]
+
+                X *= scale_x
+                X += shift_x
+                Y *= scale_y
+                Y += shift_y
+                ax.plot(X, Y, 'b-')
+            else:
+                X = np.empty((self.nE*3,))
+                Y = np.empty((self.nE*3,))
+                Z = np.empty((self.nE*3,))
+                for it in self.tree.edges_x:
+                    edge = it.second
+                    if(edge.hanging): continue
+                    i = edge.index*3
+                    p1 = edge.points[0]
+                    p2 = edge.points[1]
+                    X[i:i+3] = [p1.location[0], p2.location[0], np.nan]
+                    Y[i:i+3] = [p1.location[1], p2.location[1], np.nan]
+                    Z[i:i+3] = [p1.location[2], p2.location[2], np.nan]
+
+                offset = self.nEx
+                for it in self.tree.edges_y:
+                    edge = it.second
+                    if(edge.hanging): continue
+                    i = (edge.index+offset)*3
+                    p1 = edge.points[0]
+                    p2 = edge.points[1]
+                    X[i:i+3] = [p1.location[0], p2.location[0], np.nan]
+                    Y[i:i+3] = [p1.location[1], p2.location[1], np.nan]
+                    Z[i:i+3] = [p1.location[2], p2.location[2], np.nan]
+
+                offset += self.nEy
+                for it in self.tree.edges_z:
+                    edge = it.second
+                    if(edge.hanging): continue
+                    i = (edge.index+offset)*3
+                    p1 = edge.points[0]
+                    p2 = edge.points[1]
+                    X[i:i+3] = [p1.location[0], p2.location[0], np.nan]
+                    Y[i:i+3] = [p1.location[1], p2.location[1], np.nan]
+                    Z[i:i+3] = [p1.location[2], p2.location[2], np.nan]
+
+                X *= scale_x
+                X += shift_x
+                Y *= scale_y
+                Y += shift_y
+                Z *= scale_z
+                Z += shift_z
+                ax.plot(X, Y, 'b-', zs=Z)
 
         if cells:
             ax.plot(self.gridCC[:,0], self.gridCC[:,1], 'r.')
@@ -1370,6 +1473,26 @@ cdef class _QuadTree:
         ax.set_ylabel('x2')
 
         ax.grid(True)
+
+    def __len__(self):
+        return self.nC
+
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            # Get the start, stop, and step from the slice
+            return [self[ii] for ii in range(*key.indices(len(self)))]
+        elif isinstance(key, int):
+            if key < 0:  # Handle negative indices
+                key += len(self)
+            if key >= len(self):
+                raise IndexError(
+                    "The index ({0:d}) is out of range.".format(key)
+                )
+            pycell = Cell()
+            pycell._set(self.tree.cells[key], &self._scale[0], &self._shift[0])
+            return pycell
+        else:
+            raise TypeError("Invalid argument type.")
 
     def __dealloc__(self):
         del self.tree

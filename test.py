@@ -13,7 +13,7 @@ cartE2 = lambda M, ex, ey: np.vstack(
 cartF2 = lambda M, fx, fy: np.vstack((cart_row2(M.gridFx, fx, fy), cart_row2(M.gridFy, fx, fy)))
 
 def go():
-    nc = 64
+    nc = 32
     level = int(np.log2(nc))
     print(level)
     h = [nc, nc]
@@ -23,7 +23,7 @@ def go():
         dist = np.sqrt(r.dot(r))
         if dist < 0.2:
             return level
-        return level-1
+        return level-2
 
     t1 = time()
     # tree = QuadTree(h, func, max_level=level)
@@ -56,10 +56,19 @@ def go():
     print("nN", dTree.nN)
     print("nE", dTree.nEx, dTree.nEy)
 
-    print(np.allclose(tree.gridCC, dTree.gridCC))
-    print(np.allclose(np.sort(tree.gridN), np.sort(tree.gridN)))
-    print(np.allclose(np.sort(tree.gridEx), np.sort(tree.gridEx)))
-    print(np.allclose(np.sort(tree.gridEy), np.sort(tree.gridEy)))
+    print("Same gridCC", np.allclose(tree.gridCC, dTree.gridCC))
+
+    order1 = np.lexsort((tree.gridN[:, 1], tree.gridN[:, 0]))
+    order2 = np.lexsort((dTree.gridN[:, 1], dTree.gridN[:, 0]))
+    print("Same gridN", np.allclose(tree.gridN[order1], dTree.gridN[order2]))
+
+    order1 = np.lexsort((tree.gridEx[:, 1], tree.gridEx[:, 0]))
+    order2 = np.lexsort((dTree.gridEx[:, 1], dTree.gridEx[:, 0]))
+    print("Same gridEx", np.allclose(tree.gridEx[order1], dTree.gridEx[order2]))
+
+    order1 = np.lexsort((tree.gridEy[:, 1], tree.gridEy[:, 0]))
+    order2 = np.lexsort((dTree.gridEy[:, 1], dTree.gridEy[:, 0]))
+    print("Same gridEy", np.allclose(tree.gridEy[order1], dTree.gridEy[order2]))
 
     """
     plt.figure()
