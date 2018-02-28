@@ -231,6 +231,13 @@ void Cell::spawn(node_map_t& nodes, Cell *kids[8]){
     p12 = set_default_node(nodes, xF, yC, z0);
     p13 = set_default_node(nodes, xC, yF, z0);
 
+    //Increment node references for new nodes
+    p9->reference += 2;
+    p10->reference += 2;
+    p11->reference += 4;
+    p12->reference += 2;
+    p13->reference += 2;
+
     if(n_dim>2){
         Node *p5 = points[4];
         Node *p6 = points[5];
@@ -260,6 +267,23 @@ void Cell::spawn(node_map_t& nodes, Cell *kids[8]){
         p25 = set_default_node(nodes, xC, yC, zF);
         p26 = set_default_node(nodes, xF, yC, zF);
         p27 = set_default_node(nodes, xC, yF, zF);
+
+        //Increment node references
+        p14->reference += 2;
+        p15->reference += 4;
+        p16->reference += 2;
+        p17->reference += 4;
+        p18->reference += 8;
+        p19->reference += 4;
+        p20->reference += 2;
+        p21->reference += 4;
+        p22->reference += 2;
+
+        p23->reference += 2;
+        p24->reference += 2;
+        p25->reference += 4;
+        p26->reference += 2;
+        p27->reference += 2;
 
         Node * pQC1[8] = {p1,p9,p10,p11,p14,p15,p17,p18};
         Node * pQC2[8] = {p9,p2,p11,p12,p15,p16,p18,p19};
@@ -585,6 +609,7 @@ void Tree::build_tree(function test_func){
     }
     for(int_t i=0;i< (1<<n_dim); ++i){
         nodes[points[i]->key] = points[i];
+        points[i]->reference += 1;
     }
     root = new Cell(points, n_dim, max_level, test_func);
     root->divide(nodes);
@@ -594,71 +619,66 @@ void Tree::build_tree(function test_func){
         // Generate Faces and edges
         for(std::vector<Cell *>::size_type i =0; i!= cells.size(); i++){
             Cell *cell = cells[i];
-            Node *p1 = cell->points[0];
-            Node *p2 = cell->points[1];
-            Node *p3 = cell->points[2];
-            Node *p4 = cell->points[3];
-            Node *p5 = cell->points[4];
-            Node *p6 = cell->points[5];
-            Node *p7 = cell->points[6];
-            Node *p8 = cell->points[7];
+            Node *p[8];
+            for(int_t it=0; it<8; ++it)
+                p[it] = cell->points[it];
 
-            Edge *ex1, *ex2, *ex3, *ex4;
-            Edge *ey1, *ey2, *ey3, *ey4;
-            Edge *ez1, *ez2, *ez3, *ez4;
+            Edge *ex[4];
+            Edge *ey[4];
+            Edge *ez[4];
 
-            ex1 = set_default_edge(edges_x, *p1, *p2);
-            ex2 = set_default_edge(edges_x, *p3, *p4);
-            ex3 = set_default_edge(edges_x, *p5, *p6);
-            ex4 = set_default_edge(edges_x, *p7, *p8);
+            ex[0] = set_default_edge(edges_x, *p[0], *p[1]);
+            ex[1] = set_default_edge(edges_x, *p[2], *p[3]);
+            ex[2] = set_default_edge(edges_x, *p[4], *p[5]);
+            ex[3] = set_default_edge(edges_x, *p[6], *p[7]);
 
-            ey1 = set_default_edge(edges_y, *p1, *p3);
-            ey2 = set_default_edge(edges_y, *p2, *p4);
-            ey3 = set_default_edge(edges_y, *p5, *p7);
-            ey4 = set_default_edge(edges_y, *p6, *p8);
+            ey[0] = set_default_edge(edges_y, *p[0], *p[2]);
+            ey[1] = set_default_edge(edges_y, *p[1], *p[3]);
+            ey[2] = set_default_edge(edges_y, *p[4], *p[6]);
+            ey[3] = set_default_edge(edges_y, *p[5], *p[7]);
 
-            ez1 = set_default_edge(edges_z, *p1, *p5);
-            ez2 = set_default_edge(edges_z, *p2, *p6);
-            ez3 = set_default_edge(edges_z, *p3, *p7);
-            ez4 = set_default_edge(edges_z, *p4, *p8);
+            ez[0] = set_default_edge(edges_z, *p[0], *p[4]);
+            ez[1] = set_default_edge(edges_z, *p[1], *p[5]);
+            ez[2] = set_default_edge(edges_z, *p[2], *p[6]);
+            ez[3] = set_default_edge(edges_z, *p[3], *p[7]);
 
             Face *fx1, *fx2, *fy1, *fy2, *fz1, *fz2;
-            fx1 = set_default_face(faces_x, *p1, *p3, *p5, *p7);
-            fx2 = set_default_face(faces_x, *p2, *p4, *p6, *p8);
-            fy1 = set_default_face(faces_y, *p1, *p2, *p5, *p6);
-            fy2 = set_default_face(faces_y, *p3, *p4, *p7, *p8);
-            fz1 = set_default_face(faces_z, *p1, *p2, *p3, *p4);
-            fz2 = set_default_face(faces_z, *p5, *p6, *p7, *p8);
+            fx1 = set_default_face(faces_x, *p[0], *p[2], *p[4], *p[6]);
+            fx2 = set_default_face(faces_x, *p[1], *p[3], *p[5], *p[7]);
+            fy1 = set_default_face(faces_y, *p[0], *p[1], *p[4], *p[5]);
+            fy2 = set_default_face(faces_y, *p[2], *p[3], *p[6], *p[7]);
+            fz1 = set_default_face(faces_z, *p[0], *p[1], *p[2], *p[3]);
+            fz2 = set_default_face(faces_z, *p[4], *p[5], *p[6], *p[7]);
 
-            fx1->edges[0] = ez1;
-            fx1->edges[1] = ey3;
-            fx1->edges[2] = ez3;
-            fx1->edges[3] = ey1;
+            fx1->edges[0] = ez[0];
+            fx1->edges[1] = ey[2];
+            fx1->edges[2] = ez[2];
+            fx1->edges[3] = ey[0];
 
-            fx2->edges[0] = ez2;
-            fx2->edges[1] = ey4;
-            fx2->edges[2] = ez4;
-            fx2->edges[3] = ey2;
+            fx2->edges[0] = ez[1];
+            fx2->edges[1] = ey[3];
+            fx2->edges[2] = ez[3];
+            fx2->edges[3] = ey[1];
 
-            fy1->edges[0] = ez1;
-            fy1->edges[1] = ex3;
-            fy1->edges[2] = ez2;
-            fy1->edges[3] = ex1;
+            fy1->edges[0] = ez[0];
+            fy1->edges[1] = ex[2];
+            fy1->edges[2] = ez[1];
+            fy1->edges[3] = ex[0];
 
-            fy2->edges[0] = ez3;
-            fy2->edges[1] = ex4;
-            fy2->edges[2] = ez4;
-            fy2->edges[3] = ex2;
+            fy2->edges[0] = ez[2];
+            fy2->edges[1] = ex[3];
+            fy2->edges[2] = ez[3];
+            fy2->edges[3] = ex[1];
 
-            fz1->edges[0] = ey1;
-            fz1->edges[1] = ex2;
-            fz1->edges[2] = ey2;
-            fz1->edges[3] = ex1;
+            fz1->edges[0] = ey[0];
+            fz1->edges[1] = ex[1];
+            fz1->edges[2] = ey[1];
+            fz1->edges[3] = ex[0];
 
-            fz2->edges[0] = ey3;
-            fz2->edges[1] = ex4;
-            fz2->edges[2] = ey4;
-            fz2->edges[3] = ex3;
+            fz2->edges[0] = ey[2];
+            fz2->edges[1] = ex[3];
+            fz2->edges[2] = ey[3];
+            fz2->edges[3] = ex[2];
 
             cell->faces[0] = fx1;
             cell->faces[1] = fx2;
@@ -667,23 +687,14 @@ void Tree::build_tree(function test_func){
             cell->faces[4] = fz1;
             cell->faces[5] = fz2;
 
-            cell->edges[0] = ex1;
-            cell->edges[1] = ex2;
-            cell->edges[2] = ex3;
-            cell->edges[3] = ex4;
-            cell->edges[4] = ey1;
-            cell->edges[5] = ey2;
-            cell->edges[6] = ey3;
-            cell->edges[7] = ey4;
-            cell->edges[8] = ez1;
-            cell->edges[9] = ez2;
-            cell->edges[10] = ez3;
-            cell->edges[11] = ez4;
+            for(int_t it=0; it<4; ++it){
+                cell->edges[it  ] = ex[it];
+                cell->edges[it+4] = ey[it];
+                cell->edges[it+8] = ez[it];
+            }
 
             for(int_t it = 0; it<6; ++it)
                 cell->faces[it]->reference++;
-            for(int_t it = 0; it<8; ++it)
-                cell->points[it]->reference++;
             for(int_t it = 0; it<12; ++it)
                 cell->edges[it]->reference++;
 
