@@ -729,96 +729,28 @@ void Tree::build_tree(function test_func){
                 // and also label the edges' parents
                 if(face->points[ip^3]->reference!=6)
                     face->points[ip^3]->hanging = false;
-                if(ip==0){
-                    face->edges[0]->parents[0] = face->parent->edges[0];
-                    face->edges[0]->parents[1] = face->parent->edges[2];
 
-                    face->edges[1]->parents[0] = face->parent->edges[1];
-                    face->edges[1]->parents[1] = face->parent->edges[1];
+                face->edges[0]->parents[0] = face->parent->edges[0];
+                face->edges[0]->parents[1] = face->parent->edges[(1-(ip&1))<<1];
 
-                    face->edges[2]->parents[0] = face->parent->edges[2];
-                    face->edges[2]->parents[1] = face->parent->edges[2];
+                face->edges[1]->parents[0] = face->parent->edges[1];
+                face->edges[1]->parents[1] = face->parent->edges[(ip>>1<<1)+1];
 
-                    face->edges[3]->parents[0] = face->parent->edges[1];
-                    face->edges[3]->parents[1] = face->parent->edges[3];
+                face->edges[2]->parents[0] = face->parent->edges[(1-(ip&1))<<1];
+                face->edges[2]->parents[1] = face->parent->edges[2];
 
-                    face->points[1]->parents[0] = face->parent->points[1];
-                    face->points[1]->parents[1] = face->parent->points[3];
-                    face->points[1]->parents[2] = face->parent->points[1];
-                    face->points[1]->parents[3] = face->parent->points[3];
+                face->edges[3]->parents[0] = face->parent->edges[(ip>>1<<1)+1];
+                face->edges[3]->parents[1] = face->parent->edges[3];
 
-                    face->points[2]->parents[0] = face->parent->points[2];
-                    face->points[2]->parents[1] = face->parent->points[3];
-                    face->points[2]->parents[2] = face->parent->points[2];
-                    face->points[2]->parents[3] = face->parent->points[3];
+                face->points[ip^1]->parents[0] = face->parent->points[1-(ip&1)];
+                face->points[ip^1]->parents[1] = face->parent->points[3-(ip&1)];
+                face->points[ip^1]->parents[2] = face->parent->points[1-(ip&1)];
+                face->points[ip^1]->parents[3] = face->parent->points[3-(ip&1)];
 
-                }else if(ip==1){
-                    face->edges[0]->parents[0] = face->parent->edges[0];
-                    face->edges[0]->parents[1] = face->parent->edges[0];
-
-                    face->edges[1]->parents[0] = face->parent->edges[1];
-                    face->edges[1]->parents[1] = face->parent->edges[1];
-
-                    face->edges[2]->parents[0] = face->parent->edges[0];
-                    face->edges[2]->parents[1] = face->parent->edges[2];
-
-                    face->edges[3]->parents[0] = face->parent->edges[1];
-                    face->edges[3]->parents[1] = face->parent->edges[3];
-
-                    face->points[0]->parents[0] = face->parent->points[0];
-                    face->points[0]->parents[1] = face->parent->points[2];
-                    face->points[0]->parents[2] = face->parent->points[0];
-                    face->points[0]->parents[3] = face->parent->points[2];
-
-                    face->points[3]->parents[0] = face->parent->points[2];
-                    face->points[3]->parents[1] = face->parent->points[3];
-                    face->points[3]->parents[2] = face->parent->points[2];
-                    face->points[3]->parents[3] = face->parent->points[3];
-                }else if(ip==2){
-                    face->edges[0]->parents[0] = face->parent->edges[0];
-                    face->edges[0]->parents[1] = face->parent->edges[2];
-
-                    face->edges[1]->parents[0] = face->parent->edges[1];
-                    face->edges[1]->parents[1] = face->parent->edges[3];
-
-                    face->edges[2]->parents[0] = face->parent->edges[2];
-                    face->edges[2]->parents[1] = face->parent->edges[2];
-
-                    face->edges[3]->parents[0] = face->parent->edges[3];
-                    face->edges[3]->parents[1] = face->parent->edges[3];
-
-                    face->points[0]->parents[0] = face->parent->points[0];
-                    face->points[0]->parents[1] = face->parent->points[1];
-                    face->points[0]->parents[2] = face->parent->points[0];
-                    face->points[0]->parents[3] = face->parent->points[1];
-
-                    face->points[3]->parents[0] = face->parent->points[1];
-                    face->points[3]->parents[1] = face->parent->points[3];
-                    face->points[3]->parents[2] = face->parent->points[1];
-                    face->points[3]->parents[3] = face->parent->points[3];
-                }else{
-                    face->edges[0]->parents[0] = face->parent->edges[0];
-                    face->edges[0]->parents[1] = face->parent->edges[0];
-
-                    face->edges[1]->parents[0] = face->parent->edges[1];
-                    face->edges[1]->parents[1] = face->parent->edges[3];
-
-                    face->edges[2]->parents[0] = face->parent->edges[0];
-                    face->edges[2]->parents[1] = face->parent->edges[2];
-
-                    face->edges[3]->parents[0] = face->parent->edges[3];
-                    face->edges[3]->parents[1] = face->parent->edges[3];
-
-                    face->points[1]->parents[0] = face->parent->points[0];
-                    face->points[1]->parents[1] = face->parent->points[1];
-                    face->points[1]->parents[2] = face->parent->points[0];
-                    face->points[1]->parents[3] = face->parent->points[1];
-
-                    face->points[2]->parents[0] = face->parent->points[0];
-                    face->points[2]->parents[1] = face->parent->points[2];
-                    face->points[2]->parents[2] = face->parent->points[0];
-                    face->points[2]->parents[3] = face->parent->points[2];
-                }
+                face->points[ip^2]->parents[0] = face->parent->points[3-ip&1<<1];
+                face->points[ip^2]->parents[1] = face->parent->points[3-(ip>>1<<1)];
+                face->points[ip^2]->parents[2] = face->parent->points[3-ip&1<<1];
+                face->points[ip^2]->parents[3] = face->parent->points[3-(ip>>1<<1)];
 
                 face->hanging = true;
                 hanging_faces_x.push_back(face);
@@ -863,96 +795,28 @@ void Tree::build_tree(function test_func){
                 // and also label the edges' parents
                 if(face->points[ip^3]->reference!=6)
                     face->points[ip^3]->hanging = false;
-                if(ip==0){
-                    face->edges[0]->parents[0] = face->parent->edges[0];
-                    face->edges[0]->parents[1] = face->parent->edges[2];
 
-                    face->edges[1]->parents[0] = face->parent->edges[1];
-                    face->edges[1]->parents[1] = face->parent->edges[1];
+                face->edges[0]->parents[0] = face->parent->edges[0];
+                face->edges[0]->parents[1] = face->parent->edges[(1-(ip&1))<<1];
 
-                    face->edges[2]->parents[0] = face->parent->edges[2];
-                    face->edges[2]->parents[1] = face->parent->edges[2];
+                face->edges[1]->parents[0] = face->parent->edges[1];
+                face->edges[1]->parents[1] = face->parent->edges[(ip>>1<<1)+1];
 
-                    face->edges[3]->parents[0] = face->parent->edges[1];
-                    face->edges[3]->parents[1] = face->parent->edges[3];
+                face->edges[2]->parents[0] = face->parent->edges[(1-(ip&1))<<1];
+                face->edges[2]->parents[1] = face->parent->edges[2];
 
-                    face->points[1]->parents[0] = face->parent->points[1];
-                    face->points[1]->parents[1] = face->parent->points[3];
-                    face->points[1]->parents[2] = face->parent->points[1];
-                    face->points[1]->parents[3] = face->parent->points[3];
+                face->edges[3]->parents[0] = face->parent->edges[(ip>>1<<1)+1];
+                face->edges[3]->parents[1] = face->parent->edges[3];
 
-                    face->points[2]->parents[0] = face->parent->points[2];
-                    face->points[2]->parents[1] = face->parent->points[3];
-                    face->points[2]->parents[2] = face->parent->points[2];
-                    face->points[2]->parents[3] = face->parent->points[3];
+                face->points[ip^1]->parents[0] = face->parent->points[1-(ip&1)];
+                face->points[ip^1]->parents[1] = face->parent->points[3-(ip&1)];
+                face->points[ip^1]->parents[2] = face->parent->points[1-(ip&1)];
+                face->points[ip^1]->parents[3] = face->parent->points[3-(ip&1)];
 
-                }else if(ip==1){
-                    face->edges[0]->parents[0] = face->parent->edges[0];
-                    face->edges[0]->parents[1] = face->parent->edges[0];
-
-                    face->edges[1]->parents[0] = face->parent->edges[1];
-                    face->edges[1]->parents[1] = face->parent->edges[1];
-
-                    face->edges[2]->parents[0] = face->parent->edges[0];
-                    face->edges[2]->parents[1] = face->parent->edges[2];
-
-                    face->edges[3]->parents[0] = face->parent->edges[1];
-                    face->edges[3]->parents[1] = face->parent->edges[3];
-
-                    face->points[0]->parents[0] = face->parent->points[0];
-                    face->points[0]->parents[1] = face->parent->points[2];
-                    face->points[0]->parents[2] = face->parent->points[0];
-                    face->points[0]->parents[3] = face->parent->points[2];
-
-                    face->points[3]->parents[0] = face->parent->points[2];
-                    face->points[3]->parents[1] = face->parent->points[3];
-                    face->points[3]->parents[2] = face->parent->points[2];
-                    face->points[3]->parents[3] = face->parent->points[3];
-                }else if(ip==2){
-                    face->edges[0]->parents[0] = face->parent->edges[0];
-                    face->edges[0]->parents[1] = face->parent->edges[2];
-
-                    face->edges[1]->parents[0] = face->parent->edges[1];
-                    face->edges[1]->parents[1] = face->parent->edges[3];
-
-                    face->edges[2]->parents[0] = face->parent->edges[2];
-                    face->edges[2]->parents[1] = face->parent->edges[2];
-
-                    face->edges[3]->parents[0] = face->parent->edges[3];
-                    face->edges[3]->parents[1] = face->parent->edges[3];
-
-                    face->points[0]->parents[0] = face->parent->points[0];
-                    face->points[0]->parents[1] = face->parent->points[1];
-                    face->points[0]->parents[2] = face->parent->points[0];
-                    face->points[0]->parents[3] = face->parent->points[1];
-
-                    face->points[3]->parents[0] = face->parent->points[1];
-                    face->points[3]->parents[1] = face->parent->points[3];
-                    face->points[3]->parents[2] = face->parent->points[1];
-                    face->points[3]->parents[3] = face->parent->points[3];
-                }else{
-                    face->edges[0]->parents[0] = face->parent->edges[0];
-                    face->edges[0]->parents[1] = face->parent->edges[0];
-
-                    face->edges[1]->parents[0] = face->parent->edges[1];
-                    face->edges[1]->parents[1] = face->parent->edges[3];
-
-                    face->edges[2]->parents[0] = face->parent->edges[0];
-                    face->edges[2]->parents[1] = face->parent->edges[2];
-
-                    face->edges[3]->parents[0] = face->parent->edges[3];
-                    face->edges[3]->parents[1] = face->parent->edges[3];
-
-                    face->points[1]->parents[0] = face->parent->points[0];
-                    face->points[1]->parents[1] = face->parent->points[1];
-                    face->points[1]->parents[2] = face->parent->points[0];
-                    face->points[1]->parents[3] = face->parent->points[1];
-
-                    face->points[2]->parents[0] = face->parent->points[0];
-                    face->points[2]->parents[1] = face->parent->points[2];
-                    face->points[2]->parents[2] = face->parent->points[0];
-                    face->points[2]->parents[3] = face->parent->points[2];
-                }
+                face->points[ip^2]->parents[0] = face->parent->points[3-ip&1<<1];
+                face->points[ip^2]->parents[1] = face->parent->points[3-(ip>>1<<1)];
+                face->points[ip^2]->parents[2] = face->parent->points[3-ip&1<<1];
+                face->points[ip^2]->parents[3] = face->parent->points[3-(ip>>1<<1)];
 
                 face->hanging = true;
                 hanging_faces_y.push_back(face);
@@ -995,99 +859,32 @@ void Tree::build_tree(function test_func){
                     face->points[i]->hanging = true;
                 }
                 // the point oposite the parent node key should not be hanging
+                // most of the time
                 // and also label the edges' parents
                 if(face->points[ip^3]->reference!=6)
                     face->points[ip^3]->hanging = false;
-                if(ip==0){
-                    face->edges[0]->parents[0] = face->parent->edges[0];
-                    face->edges[0]->parents[1] = face->parent->edges[2];
 
-                    face->edges[1]->parents[0] = face->parent->edges[1];
-                    face->edges[1]->parents[1] = face->parent->edges[1];
+                face->edges[0]->parents[0] = face->parent->edges[0];
+                face->edges[0]->parents[1] = face->parent->edges[(1-(ip&1))<<1];
 
-                    face->edges[2]->parents[0] = face->parent->edges[2];
-                    face->edges[2]->parents[1] = face->parent->edges[2];
+                face->edges[1]->parents[0] = face->parent->edges[1];
+                face->edges[1]->parents[1] = face->parent->edges[(ip>>1<<1)+1];
 
-                    face->edges[3]->parents[0] = face->parent->edges[1];
-                    face->edges[3]->parents[1] = face->parent->edges[3];
+                face->edges[2]->parents[0] = face->parent->edges[(1-(ip&1))<<1];
+                face->edges[2]->parents[1] = face->parent->edges[2];
 
-                    face->points[1]->parents[0] = face->parent->points[1];
-                    face->points[1]->parents[1] = face->parent->points[3];
-                    face->points[1]->parents[2] = face->parent->points[1];
-                    face->points[1]->parents[3] = face->parent->points[3];
+                face->edges[3]->parents[0] = face->parent->edges[(ip>>1<<1)+1];
+                face->edges[3]->parents[1] = face->parent->edges[3];
 
-                    face->points[2]->parents[0] = face->parent->points[2];
-                    face->points[2]->parents[1] = face->parent->points[3];
-                    face->points[2]->parents[2] = face->parent->points[2];
-                    face->points[2]->parents[3] = face->parent->points[3];
+                face->points[ip^1]->parents[0] = face->parent->points[1-(ip&1)];
+                face->points[ip^1]->parents[1] = face->parent->points[3-(ip&1)];
+                face->points[ip^1]->parents[2] = face->parent->points[1-(ip&1)];
+                face->points[ip^1]->parents[3] = face->parent->points[3-(ip&1)];
 
-                }else if(ip==1){
-                    face->edges[0]->parents[0] = face->parent->edges[0];
-                    face->edges[0]->parents[1] = face->parent->edges[0];
-
-                    face->edges[1]->parents[0] = face->parent->edges[1];
-                    face->edges[1]->parents[1] = face->parent->edges[1];
-
-                    face->edges[2]->parents[0] = face->parent->edges[0];
-                    face->edges[2]->parents[1] = face->parent->edges[2];
-
-                    face->edges[3]->parents[0] = face->parent->edges[1];
-                    face->edges[3]->parents[1] = face->parent->edges[3];
-
-                    face->points[0]->parents[0] = face->parent->points[0];
-                    face->points[0]->parents[1] = face->parent->points[2];
-                    face->points[0]->parents[2] = face->parent->points[0];
-                    face->points[0]->parents[3] = face->parent->points[2];
-
-                    face->points[3]->parents[0] = face->parent->points[2];
-                    face->points[3]->parents[1] = face->parent->points[3];
-                    face->points[3]->parents[2] = face->parent->points[2];
-                    face->points[3]->parents[3] = face->parent->points[3];
-                }else if(ip==2){
-                    face->edges[0]->parents[0] = face->parent->edges[0];
-                    face->edges[0]->parents[1] = face->parent->edges[2];
-
-                    face->edges[1]->parents[0] = face->parent->edges[1];
-                    face->edges[1]->parents[1] = face->parent->edges[3];
-
-                    face->edges[2]->parents[0] = face->parent->edges[2];
-                    face->edges[2]->parents[1] = face->parent->edges[2];
-
-                    face->edges[3]->parents[0] = face->parent->edges[3];
-                    face->edges[3]->parents[1] = face->parent->edges[3];
-
-                    face->points[0]->parents[0] = face->parent->points[0];
-                    face->points[0]->parents[1] = face->parent->points[1];
-                    face->points[0]->parents[2] = face->parent->points[0];
-                    face->points[0]->parents[3] = face->parent->points[1];
-
-                    face->points[3]->parents[0] = face->parent->points[1];
-                    face->points[3]->parents[1] = face->parent->points[3];
-                    face->points[3]->parents[2] = face->parent->points[1];
-                    face->points[3]->parents[3] = face->parent->points[3];
-                }else{
-                    face->edges[0]->parents[0] = face->parent->edges[0];
-                    face->edges[0]->parents[1] = face->parent->edges[0];
-
-                    face->edges[1]->parents[0] = face->parent->edges[1];
-                    face->edges[1]->parents[1] = face->parent->edges[3];
-
-                    face->edges[2]->parents[0] = face->parent->edges[0];
-                    face->edges[2]->parents[1] = face->parent->edges[2];
-
-                    face->edges[3]->parents[0] = face->parent->edges[3];
-                    face->edges[3]->parents[1] = face->parent->edges[3];
-
-                    face->points[1]->parents[0] = face->parent->points[0];
-                    face->points[1]->parents[1] = face->parent->points[1];
-                    face->points[1]->parents[2] = face->parent->points[0];
-                    face->points[1]->parents[3] = face->parent->points[1];
-
-                    face->points[2]->parents[0] = face->parent->points[0];
-                    face->points[2]->parents[1] = face->parent->points[2];
-                    face->points[2]->parents[2] = face->parent->points[0];
-                    face->points[2]->parents[3] = face->parent->points[2];
-                }
+                face->points[ip^2]->parents[0] = face->parent->points[3-ip&1<<1];
+                face->points[ip^2]->parents[1] = face->parent->points[3-(ip>>1<<1)];
+                face->points[ip^2]->parents[2] = face->parent->points[3-ip&1<<1];
+                face->points[ip^2]->parents[3] = face->parent->points[3-(ip>>1<<1)];
 
                 face->hanging = true;
                 hanging_faces_z.push_back(face);
