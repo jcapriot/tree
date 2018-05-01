@@ -28,7 +28,7 @@ Node::Node(int_t x, int_t y, int_t z){
     parents[1] = NULL;
     parents[2] = NULL;
     parents[3] = NULL;
-}
+};
 
 Edge::Edge(){
     location[0] = 0;
@@ -42,7 +42,7 @@ Edge::Edge(){
     points[1] = NULL;
     parents[0] = NULL;
     parents[1] = NULL;
-}
+};
 
 Edge::Edge(Node& p1, Node& p2){
       points[0] = &p1;
@@ -104,7 +104,6 @@ Face::Face(Node& p1, Node& p2, Node& p3, Node& p4){
     edges[1] = NULL;
     edges[2] = NULL;
     edges[3] = NULL;
-
 }
 
 Node * set_default_node(node_map_t& nodes, int_t x, int_t y, int_t z){
@@ -317,24 +316,32 @@ void Cell::spawn(node_map_t& nodes, Cell *kids[8]){
 
 void Cell::set_neighbor(Cell * other, int_t position){
     if(other==NULL){
-        //std::cout<<"Other cell was NULL"<<std::endl;
         return;
     }
-    //std::cout<<"Making cells "<<center[0]<<","<<center[1];
-    //std::cout<<" and "<< other->center[0]<<","<<other->center[1];
-    //std::cout<<" neighbors"<<std::endl;
     if(level != other->level){
         neighbors[position] = other;
     }else{
         neighbors[position] = other;
         other->neighbors[position^1] = this;
-    }//else{
-     //   neighbors[position] = other;
-     //   other->neighbors[position^1] = parent;
-    //}
+    }
 };
 
-void Cell::divide(node_map_t& nodes, bool force=false){
+void Cell::insert_cell(node_map_t& nodes, int_t *new_cell, int_t p_level){
+    //Inserts a cell at max(max_level,p_level) that contains the given point
+    if(p_level>level){
+        // Need to go look in children,
+        // Need to spawn children if i don't have any...
+        if(is_leaf()){
+            divide(nodes, true);
+        }
+        int ix = new_cell[0] > center[0];
+        int iy = new_cell[1] > center[1];
+        int iz = n_dim>2 && new_cell[2]>center[2];
+        children[ix + 2*iy + 4*iz]->insert_cell(nodes, new_cell, p_level);
+    }
+};
+
+void Cell::divide(node_map_t& nodes, bool force, bool balance){
     bool do_splitting = false;
     if(level==max_level){
         do_splitting = false;
@@ -356,9 +363,11 @@ void Cell::divide(node_map_t& nodes, bool force=false){
         //If I need to be split, and my neighbor is below my level
         //Then it needs to be split
         //-x,+x,-y,+y,-z,+z
-        for(int_t i=0;i<2*n_dim;++i){
-            if(neighbors[i]!= NULL && neighbors[i]->level < level){
-                neighbors[i]->divide(nodes, true);
+        if(balance){
+            for(int_t i=0;i<2*n_dim;++i){
+                if(neighbors[i]!= NULL && neighbors[i]->level < level){
+                    neighbors[i]->divide(nodes, true);
+                }
             }
         }
 
@@ -380,9 +389,6 @@ void Cell::divide(node_map_t& nodes, bool force=false){
             children[2]->set_neighbor(children[6],5);
             children[3]->set_neighbor(children[7],5);
         }
-
-        //std::cout<<children[0]->neighbors[1]->key<<","<<children[1]->key<<std::endl;
-        //std::cout<<children[1]->neighbors[0]->key<<","<<children[0]->key<<std::endl;
 
         // -x direction
         if(neighbors[0] != NULL && !(neighbors[0]->is_leaf())){
@@ -476,7 +482,6 @@ void Cell::divide(node_map_t& nodes, bool force=false){
                 children[7]->set_neighbor(neighbors[5],5);
             }
         }
-
     }
     if(!force){
         for(int_t i=0;i<(1<<n_dim);++i){
@@ -495,73 +500,14 @@ void Cell::build_cell_vector(cell_vec_t& cells){
     }
 }
 
-bool Cell::inside_triangle(double x, double y, int_t direction){
-    int p0x,p0y,p1x,p1y,p2x,p2y;
-
-    p0x = center[0];
-    p0y = center[1];
-    if(direction==0){
-      p1x = neighbors[0]->children[1]->center[0];
-      p1y = neighbors[0]->children[1]->center[1];
-      p2x = neighbors[0]->children[3]->center[0];
-      p2y = neighbors[0]->children[3]->center[1];
-    }else if(direction==1){
-      p1x = neighbors[1]->children[0]->center[0];
-      p1y = neighbors[1]->children[0]->center[1];
-      p2x = neighbors[1]->children[2]->center[0];
-      p2y = neighbors[1]->children[2]->center[1];
-    }else if(direction==2){
-      p1x = neighbors[2]->children[2]->center[0];
-      p1y = neighbors[2]->children[2]->center[1];
-      p2x = neighbors[2]->children[3]->center[0];
-      p2y = neighbors[2]->children[3]->center[1];
-    }else{
-      p1x = neighbors[3]->children[0]->center[0];
-      p1y = neighbors[3]->children[0]->center[1];
-      p2x = neighbors[3]->children[1]->center[0];
-      p2y = neighbors[3]->children[1]->center[1];
-    }
-
-    int A = (-p1y*p2x+p0y*(p2x-p1x)+p0x*(p1y-p2y)+p1x*p2y);
-    int sign = (A<0)?-1:1;
-    double s = (p0y*p2x-p0x*p2y+(p2y-p0y)*x+(p0x-p2x)*y)*sign;
-    double t = (p0x*p1y-p0y*p1x+(p0y-p1y)*x+(p1x-p0x)*y)*sign;
-    return s>0 && t>0 && (s+t)<A*sign;
-}
-
 Cell* Cell::containing_cell(double x, double y, double z){
     if(is_leaf()){
       return this;
     }
-    if(z<=center[2]){
-        if(y<=center[1]){
-          if(x<=center[0]){
-            return children[0]->containing_cell(x,y,z);
-          }else{
-            return children[1]->containing_cell(x,y,z);
-          }
-        }else{
-          if(x<=center[0]){
-            return children[2]->containing_cell(x,y,z);
-          }else{
-            return children[3]->containing_cell(x,y,z);
-          }
-        }
-    }else{
-        if(y<center[1]){
-          if(x<center[0]){
-            return children[4]->containing_cell(x,y,z);
-          }else{
-            return children[5]->containing_cell(x,y,z);
-          }
-        }else{
-          if(x<center[0]){
-            return children[6]->containing_cell(x,y,z);
-          }else{
-            return children[7]->containing_cell(x,y,z);
-          }
-        }
-    }
+    int ix = x>center[0];
+    int iy = y>center[1];
+    int iz = n_dim>2 && z>center[2];
+    return children[ix + 2*iy + 4*iz]->containing_cell(x,y,z);
 };
 
 Cell::~Cell(){
@@ -593,7 +539,30 @@ void Tree::set_level(int_t levels){
     nz = ((n_dim==3)? 2<<max_level:0);
 };
 
-void Tree::build_tree(function test_func){
+void Tree::insert_cell(int_t *new_center, int_t p_level){
+    if(root == NULL){
+        Node* points[8];
+
+        points[0] = new Node( 0, 0, 0);
+        points[1] = new Node(nx, 0, 0);
+        points[2] = new Node( 0,ny, 0);
+        points[3] = new Node(nx,ny, 0);
+        if(n_dim==3){
+            points[4] = new Node( 0, 0,nz);
+            points[5] = new Node(nx, 0,nz);
+            points[6] = new Node( 0,ny,nz);
+            points[7] = new Node(nx,ny,nz);
+        }
+        for(int_t i=0;i< (1<<n_dim); ++i){
+            nodes[points[i]->key] = points[i];
+            points[i]->reference += 1;
+        }
+        root = new Cell(points, n_dim, max_level, NULL);
+    }
+    root->insert_cell(nodes, new_center, p_level);
+}
+
+void Tree::build_tree_from_function(function test_func){
 
     Node* points[8];
 
@@ -613,6 +582,10 @@ void Tree::build_tree(function test_func){
     }
     root = new Cell(points, n_dim, max_level, test_func);
     root->divide(nodes);
+    finalize_lists();
+};
+
+void Tree::finalize_lists(){
     root->build_cell_vector(cells);
 
     if(n_dim==3){
@@ -731,26 +704,26 @@ void Tree::build_tree(function test_func){
                     face->points[ip^3]->hanging = false;
 
                 face->edges[0]->parents[0] = face->parent->edges[0];
-                face->edges[0]->parents[1] = face->parent->edges[(1-(ip&1))<<1];
+                face->edges[0]->parents[1] = face->parent->edges[((ip&1)^1)<<1]; //2020
 
                 face->edges[1]->parents[0] = face->parent->edges[1];
-                face->edges[1]->parents[1] = face->parent->edges[(ip>>1<<1)+1];
+                face->edges[1]->parents[1] = face->parent->edges[ip>>1<<1^1]; //1133
 
-                face->edges[2]->parents[0] = face->parent->edges[(1-(ip&1))<<1];
+                face->edges[2]->parents[0] = face->parent->edges[((ip&1)^1)<<1]; //2020
                 face->edges[2]->parents[1] = face->parent->edges[2];
 
-                face->edges[3]->parents[0] = face->parent->edges[(ip>>1<<1)+1];
+                face->edges[3]->parents[0] = face->parent->edges[ip>>1<<1^1]; //1133
                 face->edges[3]->parents[1] = face->parent->edges[3];
 
-                face->points[ip^1]->parents[0] = face->parent->points[1-(ip&1)];
-                face->points[ip^1]->parents[1] = face->parent->points[3-(ip&1)];
-                face->points[ip^1]->parents[2] = face->parent->points[1-(ip&1)];
-                face->points[ip^1]->parents[3] = face->parent->points[3-(ip&1)];
+                face->points[ip^1]->parents[0] = face->parent->points[(ip&1)^1]; //1010
+                face->points[ip^1]->parents[1] = face->parent->points[(ip&1)^3]; //3232
+                face->points[ip^1]->parents[2] = face->parent->points[(ip&1)^1]; //1010
+                face->points[ip^1]->parents[3] = face->parent->points[(ip&1)^3]; //3232
 
-                face->points[ip^2]->parents[0] = face->parent->points[3-ip&1<<1];
-                face->points[ip^2]->parents[1] = face->parent->points[3-(ip>>1<<1)];
-                face->points[ip^2]->parents[2] = face->parent->points[3-ip&1<<1];
-                face->points[ip^2]->parents[3] = face->parent->points[3-(ip>>1<<1)];
+                face->points[ip^2]->parents[0] = face->parent->points[(ip>>1^1)<<1]; //2200
+                face->points[ip^2]->parents[1] = face->parent->points[(ip>>1^1)<<1^1]; //3311
+                face->points[ip^2]->parents[2] = face->parent->points[(ip>>1^1)<<1]; //2200
+                face->points[ip^2]->parents[3] = face->parent->points[(ip>>1^1)<<1^1]; //3311
 
                 face->hanging = true;
                 hanging_faces_x.push_back(face);
@@ -797,26 +770,26 @@ void Tree::build_tree(function test_func){
                     face->points[ip^3]->hanging = false;
 
                 face->edges[0]->parents[0] = face->parent->edges[0];
-                face->edges[0]->parents[1] = face->parent->edges[(1-(ip&1))<<1];
+                face->edges[0]->parents[1] = face->parent->edges[((ip&1)^1)<<1]; //2020
 
                 face->edges[1]->parents[0] = face->parent->edges[1];
-                face->edges[1]->parents[1] = face->parent->edges[(ip>>1<<1)+1];
+                face->edges[1]->parents[1] = face->parent->edges[ip>>1<<1^1]; //1133
 
-                face->edges[2]->parents[0] = face->parent->edges[(1-(ip&1))<<1];
+                face->edges[2]->parents[0] = face->parent->edges[((ip&1)^1)<<1]; //2020
                 face->edges[2]->parents[1] = face->parent->edges[2];
 
-                face->edges[3]->parents[0] = face->parent->edges[(ip>>1<<1)+1];
+                face->edges[3]->parents[0] = face->parent->edges[ip>>1<<1^1]; //1133
                 face->edges[3]->parents[1] = face->parent->edges[3];
 
-                face->points[ip^1]->parents[0] = face->parent->points[1-(ip&1)];
-                face->points[ip^1]->parents[1] = face->parent->points[3-(ip&1)];
-                face->points[ip^1]->parents[2] = face->parent->points[1-(ip&1)];
-                face->points[ip^1]->parents[3] = face->parent->points[3-(ip&1)];
+                face->points[ip^1]->parents[0] = face->parent->points[(ip&1)^1]; //1010
+                face->points[ip^1]->parents[1] = face->parent->points[(ip&1)^3]; //3232
+                face->points[ip^1]->parents[2] = face->parent->points[(ip&1)^1]; //1010
+                face->points[ip^1]->parents[3] = face->parent->points[(ip&1)^3]; //3232
 
-                face->points[ip^2]->parents[0] = face->parent->points[3-ip&1<<1];
-                face->points[ip^2]->parents[1] = face->parent->points[3-(ip>>1<<1)];
-                face->points[ip^2]->parents[2] = face->parent->points[3-ip&1<<1];
-                face->points[ip^2]->parents[3] = face->parent->points[3-(ip>>1<<1)];
+                face->points[ip^2]->parents[0] = face->parent->points[(ip>>1^1)<<1]; //2200
+                face->points[ip^2]->parents[1] = face->parent->points[(ip>>1^1)<<1^1]; //3311
+                face->points[ip^2]->parents[2] = face->parent->points[(ip>>1^1)<<1]; //2200
+                face->points[ip^2]->parents[3] = face->parent->points[(ip>>1^1)<<1^1]; //3311
 
                 face->hanging = true;
                 hanging_faces_y.push_back(face);
@@ -865,26 +838,26 @@ void Tree::build_tree(function test_func){
                     face->points[ip^3]->hanging = false;
 
                 face->edges[0]->parents[0] = face->parent->edges[0];
-                face->edges[0]->parents[1] = face->parent->edges[(1-(ip&1))<<1];
+                face->edges[0]->parents[1] = face->parent->edges[((ip&1)^1)<<1]; //2020
 
                 face->edges[1]->parents[0] = face->parent->edges[1];
-                face->edges[1]->parents[1] = face->parent->edges[(ip>>1<<1)+1];
+                face->edges[1]->parents[1] = face->parent->edges[ip>>1<<1^1]; //1133
 
-                face->edges[2]->parents[0] = face->parent->edges[(1-(ip&1))<<1];
+                face->edges[2]->parents[0] = face->parent->edges[((ip&1)^1)<<1]; //2020
                 face->edges[2]->parents[1] = face->parent->edges[2];
 
-                face->edges[3]->parents[0] = face->parent->edges[(ip>>1<<1)+1];
+                face->edges[3]->parents[0] = face->parent->edges[ip>>1<<1^1]; //1133
                 face->edges[3]->parents[1] = face->parent->edges[3];
 
-                face->points[ip^1]->parents[0] = face->parent->points[1-(ip&1)];
-                face->points[ip^1]->parents[1] = face->parent->points[3-(ip&1)];
-                face->points[ip^1]->parents[2] = face->parent->points[1-(ip&1)];
-                face->points[ip^1]->parents[3] = face->parent->points[3-(ip&1)];
+                face->points[ip^1]->parents[0] = face->parent->points[(ip&1)^1]; //1010
+                face->points[ip^1]->parents[1] = face->parent->points[(ip&1)^3]; //3232
+                face->points[ip^1]->parents[2] = face->parent->points[(ip&1)^1]; //1010
+                face->points[ip^1]->parents[3] = face->parent->points[(ip&1)^3]; //3232
 
-                face->points[ip^2]->parents[0] = face->parent->points[3-ip&1<<1];
-                face->points[ip^2]->parents[1] = face->parent->points[3-(ip>>1<<1)];
-                face->points[ip^2]->parents[2] = face->parent->points[3-ip&1<<1];
-                face->points[ip^2]->parents[3] = face->parent->points[3-(ip>>1<<1)];
+                face->points[ip^2]->parents[0] = face->parent->points[(ip>>1^1)<<1]; //2200
+                face->points[ip^2]->parents[1] = face->parent->points[(ip>>1^1)<<1^1]; //3311
+                face->points[ip^2]->parents[2] = face->parent->points[(ip>>1^1)<<1]; //2200
+                face->points[ip^2]->parents[3] = face->parent->points[(ip>>1^1)<<1^1]; //3311
 
                 face->hanging = true;
                 hanging_faces_z.push_back(face);
@@ -902,10 +875,10 @@ void Tree::build_tree(function test_func){
             for(int_t i=0;i<4;++i)
                 p[i] = cell->points[i];
             Edge *e[4];
-            e[0] = set_default_edge(edges_y, *p[0], *p[2]);
+            e[0] = set_default_edge(edges_x, *p[0], *p[1]);
             e[1] = set_default_edge(edges_x, *p[2], *p[3]);
-            e[2] = set_default_edge(edges_y, *p[1], *p[3]);
-            e[3] = set_default_edge(edges_x, *p[0], *p[1]);
+            e[2] = set_default_edge(edges_y, *p[0], *p[2]);
+            e[3] = set_default_edge(edges_y, *p[1], *p[3]);
 
             Face *face = set_default_face(faces_z, *p[0], *p[1], *p[2], *p[3]);
             for(int_t i=0;i<4;++i){
@@ -965,7 +938,6 @@ void Tree::build_tree(function test_func){
             }
         }
     }
-
     //List hanging edges x
     for(edge_it_type it = edges_x.begin(); it != edges_x.end(); ++it){
         Edge *edge = it->second;
@@ -997,7 +969,7 @@ void Tree::build_tree(function test_func){
             hanging_nodes.push_back(node);
         }
     }
-};
+}
 
 void Tree::number(){
     //Number Nodes

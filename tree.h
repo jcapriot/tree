@@ -115,10 +115,11 @@ class Cell{
 
     bool inline is_leaf(){ return children[0]==NULL;};
     void spawn(node_map_t& nodes, Cell *kids[8]);
-    void divide(node_map_t& nodes, bool force);
+    void divide(node_map_t& nodes, bool force=false, bool balance=true);
     void set_neighbor(Cell* other, int_t direction);
     void build_cell_vector(cell_vec_t& cells);
-    bool inside_triangle(double x, double y, int_t direction);
+
+    void insert_cell(node_map_t &nodes, int_t *new_center, int_t p_level);
 
     Cell* containing_cell(double, double, double);
 };
@@ -143,8 +144,11 @@ class Tree{
 
     void set_dimension(int_t dim);
     void set_level(int_t max_level);
-    void build_tree(function test_func);
+    void build_tree_from_function(function test_func);
     void number();
+    void finalize_lists();
+
+    void insert_cell(int_t *new_center, int_t p_level);
 
     Cell* containing_cell(double, double, double);
 };

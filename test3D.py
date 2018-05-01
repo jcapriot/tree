@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from tree_ext import QuadTree as Tree
+from TreeMesh import TreeMesh as Tree
 from time import time
 from vtk_writer import writeVTK, write_points
 
@@ -13,23 +13,22 @@ cartF3 = lambda M, fx, fy, fz: np.vstack((cart_row3(M.gridFx, fx, fy, fz), cart_
 cartE3 = lambda M, ex, ey, ez: np.vstack((cart_row3(M.gridEx, ex, ey, ez), cart_row3(M.gridEy, ex, ey, ez), cart_row3(M.gridEz, ex, ey, ez)))
 
 def go():
-    nc = 64
+    nc = 8
     level = int(np.log2(nc))
     h = [nc, nc, nc]
 
     def func(cell):
         r = cell.center - np.array([0.5]*len(cell.center))
         dist = np.sqrt(r.dot(r))
-        if dist < 0.2:
+        if dist < 0.25:
             return level
         return level-1
 
     #"""
     t1 = time()
     # tree = QuadTree(h, func, max_level=level)
-    tree = Tree(h, max_level=level)
-    tree.build_tree(func)
-    tree.number()
+    tree = Tree(h, levels=level)
+    tree.refine(func)
     t2 = time()
     print('Tree Construction time:', t2-t1)
     print("nC", tree.nC)
@@ -45,9 +44,11 @@ def go():
     print("nE", tree.nEx, tree.nEy, tree.nEz)
     print("nF", tree.nFx, tree.nFy, tree.nFz)
     #"""
+
     t1 = time()
     dTree = TreeMesh(h, levels=level)
     dTree.refine(func, balance=True)
+    dTree.balance()
     dTree.number(balance=True)
     t2 = time()
     print('TreeMesh Construction time', t2-t1)
@@ -102,28 +103,6 @@ def go():
     order2 = np.lexsort((grid2[:, 2], grid2[:, 1], grid2[:, 0]))
     print("Same gridFz", np.allclose(grid1[order1], grid2[order2]))
 
-    #grid = tree.gridNparentsh()
-    #print(grid.shape)
-    """
-    write_points(grid, "test.vtp")
-
-    grid = tree.gridNwithparentsh()
-    write_points(grid, "test2.vtp")
-
-    write_points(tree.gridN, "Tree.vtp")
-    write_points(dTree.gridN, "TreeMesh.vtp")
-
-    writeVTK(tree, 'MyTree.vtu')
-    writeVTK(dTree, 'TreeMesh.vtu')
-    """
-
-    """
-    plt.figure()
-    tree.plotGrid()
-    plt.figure()
-    dTree.plotGrid()
-    plt.show()
-    """
     # Face Divergence test
     fx = lambda x, y, z: np.sin(2*np.pi*x)
     fy = lambda x, y, z: np.sin(2*np.pi*y)
@@ -189,5 +168,34 @@ def go():
     curlE = C.dot(E)
     print('TreeMesh Cnorm:', np.linalg.norm((curlE - curlE_ana)))
 
+    tree.plotGrid(showIt=True, facesX=True)
+
+def test_io():
+    #meshFile = 'Horseshoe_SingleBlk7m_Center_Octree_Core6_4_2_500mPad_Reg.msh'
+
+    meshFile = 'octree_mesh.txt'
+
+    dTree = TreeMesh.readUBC(meshFile)
+    print(dTree)
+
+    tree = Tree.readUBC(meshFile)
+
+    tree.writeUBC('test.txt')
+
+    print(tree)
+
+    print(tree.fill, dTree.fill)
+
+    """
+    t1 = time()
+    C = dTree.edgeCurl
+    t2 = time()
+    print(t2-t1)
+    #writeVTK(tree, 'MyTree.vtu')
+    #dTree.writeVTK('Tree.vtu')
+    #writeVTK(dTree, 'TreeMesh.vtu')
+    """
+
 if __name__=='__main__':
-    go()
+    # go()
+    test_io()

@@ -80,6 +80,8 @@ cdef extern from "tree.h":
 
         void set_dimension(int_t)
         void set_level(int_t)
-        void build_tree(PyWrapper *)
+        void build_tree_from_function(PyWrapper *)
         void number()
+        void insert_cell(int_t *new_center, int_t p_level);
+        void finalize_lists()
         Cell * containing_cell(double, double, double)

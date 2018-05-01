@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from tree_ext import QuadTree as Tree
+import scipy.sparse as sp
+from TreeMesh import TreeMesh as Tree
 from time import time
 
 from discretize import TreeMesh
@@ -13,7 +14,7 @@ cartE2 = lambda M, ex, ey: np.vstack(
 cartF2 = lambda M, fx, fy: np.vstack((cart_row2(M.gridFx, fx, fy), cart_row2(M.gridFy, fx, fy)))
 
 def go():
-    nc = 32
+    nc = 8
     level = int(np.log2(nc))
     print(level)
     h = [nc, nc]
@@ -21,15 +22,14 @@ def go():
     def func(cell):
         r = cell.center - np.array([0.5]*len(cell.center))
         dist = np.sqrt(r.dot(r))
-        if dist < 0.2:
+        if dist < 0.25:
             return level
-        return level-2
+        return level-1
 
     t1 = time()
     # tree = QuadTree(h, func, max_level=level)
-    tree = Tree(h, max_level=level)
-    tree.build_tree(func)
-    tree.number()
+    tree = Tree(h, levels=level)
+    tree.refine(func)
     t2 = time()
     print('Tree Construction time:', t2-t1)
     print("nC", tree.nC)
@@ -58,25 +58,17 @@ def go():
 
     print("Same gridCC", np.allclose(tree.gridCC, dTree.gridCC))
 
-    order1 = np.lexsort((tree.gridN[:, 1], tree.gridN[:, 0]))
-    order2 = np.lexsort((dTree.gridN[:, 1], dTree.gridN[:, 0]))
-    print("Same gridN", np.allclose(tree.gridN[order1], dTree.gridN[order2]))
+    orderN1 = np.lexsort((tree.gridN[:, 1], tree.gridN[:, 0]))
+    orderN2 = np.lexsort((dTree.gridN[:, 1], dTree.gridN[:, 0]))
+    print("Same gridN", np.allclose(tree.gridN[orderN1], dTree.gridN[orderN2]))
 
-    order1 = np.lexsort((tree.gridEx[:, 1], tree.gridEx[:, 0]))
-    order2 = np.lexsort((dTree.gridEx[:, 1], dTree.gridEx[:, 0]))
-    print("Same gridEx", np.allclose(tree.gridEx[order1], dTree.gridEx[order2]))
+    orderEx1 = np.lexsort((tree.gridEx[:, 1], tree.gridEx[:, 0]))
+    orderEx2 = np.lexsort((dTree.gridEx[:, 1], dTree.gridEx[:, 0]))
+    print("Same gridEx", np.allclose(tree.gridEx[orderEx1], dTree.gridEx[orderEx2]))
 
-    order1 = np.lexsort((tree.gridEy[:, 1], tree.gridEy[:, 0]))
-    order2 = np.lexsort((dTree.gridEy[:, 1], dTree.gridEy[:, 0]))
-    print("Same gridEy", np.allclose(tree.gridEy[order1], dTree.gridEy[order2]))
-
-    """
-    plt.figure()
-    tree.plotGrid(nodes=True)
-    plt.figure()
-    dTree.plotGrid(nodes=True)
-    plt.show()
-    """
+    orderEy1 = np.lexsort((tree.gridEy[:, 1], tree.gridEy[:, 0]))
+    orderEy2 = np.lexsort((dTree.gridEy[:, 1], dTree.gridEy[:, 0]))
+    print("Same gridEy", np.allclose(tree.gridEy[orderEy1], dTree.gridEy[orderEy2]))
 
     # Face Divergence test
     fx = lambda x, y: np.sin(2*np.pi*x)
@@ -88,7 +80,7 @@ def go():
     F1 = tree.projectFaceVector(Fc1)
 
     divF = tree.faceDiv.dot(F1)
-    print('QuadTree Dnorm:', np.linalg.norm(divF-divF_ana))
+    print('cppTree Dnorm:', np.linalg.norm(divF-divF_ana))
 
     Fc2 = cartF2(dTree, fx, fy)
     F2 = dTree.projectFaceVector(Fc2)
@@ -106,7 +98,7 @@ def go():
     gradE_ana = tree.projectEdgeVector(cartE2(tree, solX, solY))
     fn = call2(fun, tree.gridN)
     gradE = G*fn
-    print('QuadTree Gnorm:', np.linalg.norm(gradE-gradE_ana))
+    print('cppTree Gnorm:', np.linalg.norm(gradE-gradE_ana))
 
     dG = dTree.nodalGrad
     fn2 = call2(fun, dTree.gridN)
@@ -115,6 +107,7 @@ def go():
 
     print('TreeMesh Gnorm:', np.linalg.norm(gradE2-gradE_ana2))
 
+    tree.plotGrid(showIt=True, edgesY=True)
 
 if __name__=='__main__':
     go()
