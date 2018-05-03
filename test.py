@@ -5,6 +5,7 @@ from TreeMesh import TreeMesh as Tree
 from time import time
 
 from discretize import TreeMesh
+from discretize.utils import TensorType
 
 
 call2 = lambda fun, xyz: fun(xyz[:, 0], xyz[:, 1])
@@ -18,11 +19,15 @@ def go():
     level = int(np.log2(nc))
     print(level)
     h = [nc, nc]
+    h = np.random.randint(2,4,(2,nc))
+    h = h/h.sum(axis=1)[:, None]
+    print(h)
+    h = [h[0], h[1]]
 
     def func(cell):
         r = cell.center - np.array([0.5]*len(cell.center))
         dist = np.sqrt(r.dot(r))
-        if dist < 0.25:
+        if dist < 0.2:
             return level
         return level-1
 
@@ -107,7 +112,59 @@ def go():
 
     print('TreeMesh Gnorm:', np.linalg.norm(gradE2-gradE_ana2))
 
-    tree.plotGrid(showIt=True, edgesY=True)
+    plt.figure()
+    tree.plotGrid(facesY=True)
+    plt.show()
+
+
+    z = 5  # Because 5 is just such a great number.
+
+    call = lambda fun, xy: fun(xy[:, 0], xy[:, 1])
+
+    ex = lambda x, y: x**2+y*z
+    ey = lambda x, y: (z**2)*x+y*z
+
+    sigma1 = lambda x, y: x*y+1
+    sigma2 = lambda x, y: x*z+2
+    sigma3 = lambda x, y: 3+z*y
+    analytic = 144877./360
+
+
+    mesh = tree
+    Gc = mesh.gridCC
+    sigma = np.c_[call(sigma1, Gc)]
+
+    ttype = TensorType(mesh, None)
+
+    cart = lambda g: np.c_[call(ex, g), call(ey, g)]
+    Fc = np.vstack((cart(mesh.gridFx),
+                    cart(mesh.gridFy)))
+    F = mesh.projectFaceVector(Fc)
+
+    A = mesh.getFaceInnerProduct(sigma)
+    numeric = F.T.dot(A.dot(F))
+
+    err = np.abs(numeric - analytic)
+
+    print(err)
+
+    mesh = dTree
+    Gc = mesh.gridCC
+    sigma = np.c_[call(sigma1, Gc)]
+
+    ttype = TensorType(mesh, None)
+
+    cart = lambda g: np.c_[call(ex, g), call(ey, g)]
+    Fc = np.vstack((cart(mesh.gridFx),
+                    cart(mesh.gridFy)))
+    F = mesh.projectFaceVector(Fc)
+
+    A = mesh.getFaceInnerProduct(sigma)
+    numeric = F.T.dot(A.dot(F))
+
+    err = np.abs(numeric - analytic)
+
+    print(err)
 
 if __name__=='__main__':
     go()

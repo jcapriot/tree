@@ -168,7 +168,7 @@ def go():
     curlE = C.dot(E)
     print('TreeMesh Cnorm:', np.linalg.norm((curlE - curlE_ana)))
 
-    tree.plotGrid(showIt=True, facesX=True)
+    tree.plotGrid(showIt=True, facesZ=True)
 
 def test_io():
     #meshFile = 'Horseshoe_SingleBlk7m_Center_Octree_Core6_4_2_500mPad_Reg.msh'
@@ -197,5 +197,5 @@ def test_io():
     """
 
 if __name__=='__main__':
-    # go()
+    #go()
     test_io()

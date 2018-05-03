@@ -1,11 +1,12 @@
 from discretize.TensorMesh import BaseTensorMesh
+from discretize.InnerProducts import InnerProducts
 from tree_ext import _TreeMesh
 import numpy as np
 from scipy.spatial import Delaunay
 import scipy.sparse as sp
 from discretize import utils
 
-class TreeMesh(_TreeMesh, BaseTensorMesh):
+class TreeMesh(_TreeMesh, BaseTensorMesh, InnerProducts):
     _meshType = 'TREE'
 
     #inheriting stuff from BaseTensorMesh that isn't defined in _QuadTree
@@ -15,14 +16,8 @@ class TreeMesh(_TreeMesh, BaseTensorMesh):
         if levels is None:
             levels = int(np.log2(len(self.h[0])))
 
-        if(self.dim == 2):
-            xF = np.array([self.vectorNx[-1], self.vectorNy[-1]])
-        else:
-            xF = np.array([self.vectorNx[-1], self.vectorNy[-1], self.vectorNz[-1]])
-        ws = xF-self.x0
-
         # Now can initialize cpp tree parent
-        _TreeMesh.__init__(self, levels, self.x0, ws)
+        _TreeMesh.__init__(self, levels, self.x0, self.h)
 
     def __str__(self):
         outStr = '  ---- {0!s}TreeMesh ----  '.format(
@@ -203,6 +198,25 @@ class TreeMesh(_TreeMesh, BaseTensorMesh):
         return self._cellGradz
 
     @property
+    def faceDivx(self):
+        if getattr(self, '_faceDivx', None) is None:
+            print(self.faceDiv.shape, self.nFx)
+            self._faceDivx = self.faceDiv[:, :self.nFx]
+        return self._faceDivx
+
+    @property
+    def faceDivy(self):
+        if getattr(self, '_faceDivy', None) is None:
+            self._faceDivy = self.faceDiv[:, self.nFx:self.nFx+self.nFy]
+        return self._faceDivy
+
+    @property
+    def faceDivz(self):
+        if getattr(self, '_faceDivz', None) is None:
+            self._faceDivz = self.faceDiv[:, self.nFx+self.nFy:]
+        return self._faceDivz
+
+    @property
     def aveCC2Fx(self):
         "Construct the averaging operator on cell centers to cell x-faces."
         if getattr(self, '_aveCC2Fx', None) is None:
@@ -355,7 +369,7 @@ class TreeMesh(_TreeMesh, BaseTensorMesh):
         max_level = int(np.log2(nCunderMesh[0]))
         mesh = TreeMesh([h1, h2, h3], x0=x0, levels=max_level)
 
-        # Convert indArr to points in local coordinates of underlying cpp tree
+        # Convert indArr to points in coordinates of underlying cpp tree
         # indArr is ix, iy, iz(top-down) need it in ix, iy, iz (bottom-up)
         indArr[:, :-1] -= 1 #shift by 1....
         indArr[:, :-1] = 2*indArr[:, :-1] + indArr[:, -1, None]
@@ -363,7 +377,14 @@ class TreeMesh(_TreeMesh, BaseTensorMesh):
 
         indArr[:, -1] = max_level-np.log2(indArr[:, -1])
 
-        mesh._insert_cells(indArr)
+        #convert indArr to list of points
+        levels = indArr[:, -1]
+
+        xs, ys, zs = mesh._get_xs()
+
+        points = np.column_stack((xs[indArr[:,0]], ys[indArr[:,1]], zs[indArr[:,2]]))
+
+        mesh._insert_cells(points, levels)
         mesh.number()
         return mesh
 
@@ -388,8 +409,8 @@ class TreeMesh(_TreeMesh, BaseTensorMesh):
         ubc_order = mesh._ubc_order
         # order_ubc will re-order from treemesh ordering to UBC ordering
         # need the opposite operation
-        un_order = np.empty_like(order_ubc)
-        un_order[order_ubc] = np.arange(len(ubc_order))
+        un_order = np.empty_like(ubc_order)
+        un_order[ubc_order] = np.arange(len(ubc_order))
 
         modList.append(modArr[un_order])
         return modList
