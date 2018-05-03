@@ -9,16 +9,18 @@ environment:
     # /E:ON and /V:ON options are not enabled in the batch script intepreter
     # See: http://stackoverflow.com/a/13751649/163740
     CMD_IN_ENV: 'cmd /E:ON /V:ON /C .\run_with_env.cmd'
+    PROJECT_NAME: tree
+    GITHUB_REPO_NAME: jcapriot/tree
 
   matrix:
     - PYTHON_VERSION: 2.7
-      MINICONDA: C:\Miniconda
+      CONDA: C:\Miniconda
 
     - PYTHON_VERSION: 3.5
-      MINICONDA: C:\Miniconda35
+      CONDA: C:\Miniconda35
 
     - PYTHON_VERSION: 3.6
-      MINICONDA: C:\Miniconda36
+      CONDA: C:\Miniconda36
 
 image: Visual Studio 2017
 
@@ -49,7 +51,7 @@ install:
   - pip install codecov coverage
   # Show conda info for debugging
   - conda info -a
- 
+
   - "conda create -q -n test-environment python=%PYTHON% numpy scipy matplotlib cython"
   - activate test-environment
   - python --version
