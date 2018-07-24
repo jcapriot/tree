@@ -33,7 +33,7 @@ after_success:
       echo "Not deploying (because this is not a deployment branch)" ;
       exit 0 ;
     fi
-  - if [ $TRAVIS_PULL_REQUEST ]; then
+  - if ! [ "$TRAVIS_PULL_REQUEST" = "false" ]; then
       echo "Not deploying (because this is a pull request)" ;
       exit 0 ;
     fi
