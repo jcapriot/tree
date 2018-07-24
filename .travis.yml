@@ -10,11 +10,13 @@ env:
     - PYPI_PY=3.6  # deploy to pypi from python 3.6
 
 before_install:
-  - pip install numpy scipy matplotlib cython;
+  - echo "Installing some pre-stuff here"
+  #- pip install numpy scipy matplotlib cython;
 
 install:
   - python --version
-  - python setup.py build_ext --inplace
+  #- python setup.py build_ext --inplace
+  - echo "I'm building Here"
 
 script:
   - echo "SOMETHING WAS TESTED GOOD"
@@ -31,7 +33,7 @@ after_success:
       echo "Not deploying (because this is not a deployment branch)" ;
       exit 0 ;
     fi
-  - if [ "$TRAVIS_PULL_REQUEST" = "true" ]; then
+  - if [ $TRAVIS_PULL_REQUEST ]; then
       echo "Not deploying (because this is a pull request)" ;
       exit 0 ;
     fi
