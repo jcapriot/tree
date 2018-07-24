@@ -1,6 +1,6 @@
 language: python
 python:
-- 3.6
+- "3.6"
 
 sudo: false
 
@@ -10,18 +10,9 @@ env:
     - PYPI_PY=3.6  # deploy to pypi from python 3.6
 
 before_install:
-  - if [ ${TRAVIS_PYTHON_VERSION:0:1} == "2" ]; then
-      wget http://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh;
-    else
-      wget http://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
-    fi
-  - chmod +x miniconda.sh
-  - ./miniconda.sh -b -p $HOME/miniconda
-  - export PATH=/home/travis/anaconda/bin:/home/travis/miniconda/bin:$PATH
-  - conda update --yes conda
+  - pip install numpy scipy matplotlib cython discretize;
 
 install:
-  - conda install --quiet --yes pip python=$TRAVIS_PYTHON_VERSION numpy scipy matplotlib cython;
   - python --version
   - python setup.py build_ext
 
@@ -29,7 +20,6 @@ script:
   - python test3D.py
 
 after_success:
-
   # - bash <(curl -s https://codecov.io/bash)
   - echo $TRAVIS_BRANCH
   - echo $MASTER_BRANCH
