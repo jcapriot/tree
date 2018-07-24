@@ -10,11 +10,13 @@ env:
     - PYPI_PY=3.6  # deploy to pypi from python 3.6
 
 before_install:
-  - pip install numpy scipy matplotlib cython;
+  - echo "Installing some pre-stuff here"
+  #- pip install numpy scipy matplotlib cython;
 
 install:
   - python --version
-  - python setup.py build_ext --inplace
+  #- python setup.py build_ext --inplace
+  - echo "I'm building Here"
 
 script:
   - echo "SOMETHING WAS TESTED GOOD"
