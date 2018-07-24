@@ -523,7 +523,7 @@ void Cell::build_cell_vector(cell_vec_t& cells){
         cells.push_back(this);
         return;
     }
-    for(int_t i=0;i< 1<<n_dim;++i){
+    for(int_t i=0;i< 1ULL<<n_dim;++i){
         children[i]->build_cell_vector(cells);
     }
 }
