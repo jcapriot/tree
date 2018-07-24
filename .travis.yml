@@ -16,7 +16,7 @@ before_install:
 install:
   - python --version
   #- python setup.py build_ext --inplace
-  - echo "I'm building Here"
+  - echo "I'm building Here pull 2 here"
 
 script:
   - echo "SOMETHING WAS TESTED GOOD"
