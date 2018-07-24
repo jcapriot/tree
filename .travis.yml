@@ -16,7 +16,7 @@ before_install:
 install:
   - python --version
   #- python setup.py build_ext --inplace
-  - echo "I'm building Here"
+  - echo "I'm building Here pull 2 here"
 
 script:
   - echo "SOMETHING WAS TESTED GOOD"
@@ -33,7 +33,7 @@ after_success:
       echo "Not deploying (because this is not a deployment branch)" ;
       exit 0 ;
     fi
-  - if [ $TRAVIS_PULL_REQUEST ]; then
+  - if ! [ "$TRAVIS_PULL_REQUEST" = "false" ]; then
       echo "Not deploying (because this is a pull request)" ;
       exit 0 ;
     fi
